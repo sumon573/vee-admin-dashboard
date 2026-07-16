@@ -1,0 +1,1 @@
+- [Admin Dashboard Architecture](admin-dashboard-arch.md) — Firebase RTDB only; client-side filter/sort/paginate; dark theme requires class="dark" on <html>
