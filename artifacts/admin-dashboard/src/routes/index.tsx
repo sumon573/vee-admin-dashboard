@@ -11,6 +11,7 @@ import ReportsPage from '@/pages/reports/ReportsPage';
 import RoomsPage from '@/pages/rooms/RoomsPage';
 import ModerationLogPage from '@/pages/moderation/ModerationLogPage';
 import WalletPage from '@/pages/wallet/WalletPage';
+import HonorsPage from '@/pages/honors/HonorsPage';
 
 /**
  * Application route tree.
@@ -34,6 +35,7 @@ export function AppRoutes() {
           <Route path="/rooms" element={<RoomsPage />} />
           <Route path="/moderation" element={<ModerationLogPage />} />
           <Route path="/wallet" element={<WalletPage />} />
+          <Route path="/honors" element={<HonorsPage />} />
         </Route>
       </Route>
 

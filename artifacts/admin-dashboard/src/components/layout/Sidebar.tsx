@@ -7,6 +7,7 @@ import {
   Radio,
   ScrollText,
   Wallet,
+  Award,
   LogOut
 } from 'lucide-react';
 import { useAppAuth } from '@/contexts/AuthContext';
@@ -20,6 +21,7 @@ const navItems = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
   { label: 'Users', href: '/users', icon: Users2 },
   { label: 'Wallet', href: '/wallet', icon: Wallet },
+  { label: 'Honors', href: '/honors', icon: Award },
   { label: 'Reports', href: '/reports', icon: Flag },
   { label: 'Voice Rooms', href: '/rooms', icon: Radio },
   { label: 'Mod Log', href: '/moderation', icon: ScrollText },
