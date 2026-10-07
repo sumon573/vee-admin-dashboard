@@ -13,6 +13,7 @@ import ModerationLogPage from '@/pages/moderation/ModerationLogPage';
 import WalletPage from '@/pages/wallet/WalletPage';
 import HonorsPage from '@/pages/honors/HonorsPage';
 import GiftsPage from '@/pages/gifts/GiftsPage';
+import BroadcastPage from '@/pages/broadcast/BroadcastPage';
 
 /**
  * Application route tree.
@@ -38,6 +39,7 @@ export function AppRoutes() {
           <Route path="/wallet" element={<WalletPage />} />
           <Route path="/honors" element={<HonorsPage />} />
           <Route path="/gifts" element={<GiftsPage />} />
+          <Route path="/broadcast" element={<BroadcastPage />} />
         </Route>
       </Route>
 
