@@ -24,3 +24,4 @@ export {
   useAddDiamonds,
   useRemoveDiamonds,
 } from './useUsers';
+export { usePermissions } from './usePermissions';

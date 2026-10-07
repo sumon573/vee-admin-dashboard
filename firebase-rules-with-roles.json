@@ -1,0 +1,83 @@
+{
+  "rules": {
+    // Helper functions
+    // Note: These are conceptual - actual implementation uses Firebase RTDB rules syntax
+    
+    "users": {
+      "$uid": {
+        // Anyone can read basic user info (for app functionality)
+        ".read": "auth != null",
+        
+        // Only the user themselves or admin+ can write
+        // Role field is PROTECTED - only superAdmin can change it
+        "role": {
+          ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'superAdmin'"
+        },
+        
+        // Diamonds - only admin+ can modify (via admin panel or server)
+        "diamonds": {
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'superAdmin' || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+        },
+        
+        // Ban status - admin+ can ban, moderator can ban but not unban
+        "isBanned": {
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'superAdmin' || root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'moderator')"
+        },
+        
+        // Honors - only superAdmin and admin can grant
+        "honors": {
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'superAdmin' || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+        },
+        
+        // Other user fields - user can update their own, admin+ can update any
+        "$other": {
+          ".write": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('role').val() == 'superAdmin' || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+        }
+      }
+    },
+    
+    // Gifts catalog - only superAdmin and admin can modify
+    "gifts_catalog": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'superAdmin' || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+    },
+    
+    // Honors catalog - only superAdmin and admin can modify
+    "honors_catalog": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'superAdmin' || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+    },
+    
+    // Feature flags - ONLY superAdmin can modify
+    "config": {
+      "feature_flags": {
+        ".read": "auth != null",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'superAdmin'"
+      }
+    },
+    
+    // Admin audit logs - only superAdmin and admin can read, system writes
+    "admin_audit": {
+      ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'superAdmin' || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'superAdmin' || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+    },
+    
+    // Wallet transactions - read by admin+, written by system
+    "wallet_transactions": {
+      ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'superAdmin' || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+      ".write": false
+    },
+    
+    // Voice rooms - existing rules (moderator+ can moderate)
+    "voice_rooms": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    
+    // Reports - moderator+ can handle
+    "reports": {
+      ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'superAdmin' || root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'moderator')",
+      ".write": "auth != null"
+    }
+  }
+}

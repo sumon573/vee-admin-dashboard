@@ -16,34 +16,49 @@ import {
   LogOut
 } from 'lucide-react';
 import { useAppAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { RoleBadge } from '@/components/users/RoleBadge';
 import { getInitials } from '@/utils';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
+import type { Permission } from '@/lib/permissions';
 
-const navItems = [
+interface NavItem {
+  label: string;
+  href: string;
+  icon: any;
+  permission?: keyof Permission;
+}
+
+const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { label: 'Users', href: '/users', icon: Users2 },
-  { label: 'Wallet', href: '/wallet', icon: Wallet },
-  { label: 'Honors', href: '/honors', icon: Award },
-  { label: 'Gifts', href: '/gifts', icon: Gift },
-  { label: 'Broadcast', href: '/broadcast', icon: Bell },
-  { label: 'Live Monitor', href: '/monitoring', icon: Activity },
-  { label: 'Reports', href: '/reports', icon: Flag },
+  { label: 'Users', href: '/users', icon: Users2, permission: 'canViewUsers' },
+  { label: 'Wallet', href: '/wallet', icon: Wallet, permission: 'canViewWallet' },
+  { label: 'Honors', href: '/honors', icon: Award, permission: 'canManageHonors' },
+  { label: 'Gifts', href: '/gifts', icon: Gift, permission: 'canManageGifts' },
+  { label: 'Broadcast', href: '/broadcast', icon: Bell, permission: 'canSendBroadcast' },
+  { label: 'Live Monitor', href: '/monitoring', icon: Activity, permission: 'canViewMonitoring' },
+  { label: 'Reports', href: '/reports', icon: Flag, permission: 'canViewReports' },
   { label: 'Voice Rooms', href: '/rooms', icon: Radio },
   { label: 'Mod Log', href: '/moderation', icon: ScrollText },
-  { label: 'Audit Logs', href: '/audit', icon: Scroll },
-  { label: 'Config', href: '/config', icon: Settings },
+  { label: 'Audit Logs', href: '/audit', icon: Scroll, permission: 'canViewAuditLogs' },
+  { label: 'Config', href: '/config', icon: Settings, permission: 'canManageFeatureFlags' },
 ];
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { appUser, signOut } = useAppAuth();
+  const { can } = usePermissions();
   const location = useLocation();
 
   const handleSignOut = async () => {
     await signOut();
   };
+  
+  // Filter nav items based on user permissions
+  const visibleItems = navItems.filter(item => 
+    !item.permission || can(item.permission)
+  );
 
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-border">
@@ -54,7 +69,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
       <div className="flex-1 overflow-y-auto py-4">
         <nav className="space-y-1 px-3">
-          {navItems.map((item) => {
+          {visibleItems.map((item) => {
             const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href));
             const Icon = item.icon;
             
