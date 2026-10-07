@@ -10,6 +10,9 @@ import {
   Award,
   Gift,
   Bell,
+  Activity,
+  Scroll,
+  Settings,
   LogOut
 } from 'lucide-react';
 import { useAppAuth } from '@/contexts/AuthContext';
@@ -26,9 +29,12 @@ const navItems = [
   { label: 'Honors', href: '/honors', icon: Award },
   { label: 'Gifts', href: '/gifts', icon: Gift },
   { label: 'Broadcast', href: '/broadcast', icon: Bell },
+  { label: 'Live Monitor', href: '/monitoring', icon: Activity },
   { label: 'Reports', href: '/reports', icon: Flag },
   { label: 'Voice Rooms', href: '/rooms', icon: Radio },
   { label: 'Mod Log', href: '/moderation', icon: ScrollText },
+  { label: 'Audit Logs', href: '/audit', icon: Scroll },
+  { label: 'Config', href: '/config', icon: Settings },
 ];
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {

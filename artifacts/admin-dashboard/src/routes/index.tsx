@@ -14,6 +14,9 @@ import WalletPage from '@/pages/wallet/WalletPage';
 import HonorsPage from '@/pages/honors/HonorsPage';
 import GiftsPage from '@/pages/gifts/GiftsPage';
 import BroadcastPage from '@/pages/broadcast/BroadcastPage';
+import MonitoringPage from '@/pages/monitoring/MonitoringPage';
+import AuditPage from '@/pages/audit/AuditPage';
+import ConfigPage from '@/pages/config/ConfigPage';
 
 /**
  * Application route tree.
@@ -40,6 +43,9 @@ export function AppRoutes() {
           <Route path="/honors" element={<HonorsPage />} />
           <Route path="/gifts" element={<GiftsPage />} />
           <Route path="/broadcast" element={<BroadcastPage />} />
+          <Route path="/monitoring" element={<MonitoringPage />} />
+          <Route path="/audit" element={<AuditPage />} />
+          <Route path="/config" element={<ConfigPage />} />
         </Route>
       </Route>
 
