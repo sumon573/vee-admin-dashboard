@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings, ToggleLeft, ToggleRight, Wrench } from 'lucide-react';
 import { ref, get, set } from 'firebase/database';
-import { database } from '@/config/firebase';
+import { rtdb as database } from '@/config/firebase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';

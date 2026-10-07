@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ScrollText, Search, ShieldCheck, UserX, Award, Wallet, Bell } from 'lucide-react';
 import { ref, get, query, orderByChild, limitToLast } from 'firebase/database';
-import { database } from '@/config/firebase';
+import { rtdb as database } from '@/config/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';

@@ -5,7 +5,7 @@ import {
   TrendingUp, Users, DollarSign 
 } from 'lucide-react';
 import { ref, get, query, orderByChild, limitToLast } from 'firebase/database';
-import { database } from '@/config/firebase';
+import { rtdb as database } from '@/config/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';

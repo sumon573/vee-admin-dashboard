@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Award, Search, Plus, X, Crown, Medal, Star } from 'lucide-react';
 import { ref, get, set, remove } from 'firebase/database';
-import { database } from '@/config/firebase';
+import { rtdb as database } from '@/config/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
