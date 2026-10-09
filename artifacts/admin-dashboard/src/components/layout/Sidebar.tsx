@@ -12,6 +12,7 @@ import {
   Bell,
   Activity,
   Scroll,
+  Hash,
   Settings,
   LogOut
 } from 'lucide-react';
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
   { label: 'Live Monitor', href: '/monitoring', icon: Activity, permission: 'canViewMonitoring' },
   { label: 'Reports', href: '/reports', icon: Flag, permission: 'canViewReports' },
   { label: 'Voice Rooms', href: '/rooms', icon: Radio },
+  { label: 'Short IDs', href: '/shortids', icon: Hash },
   { label: 'Mod Log', href: '/moderation', icon: ScrollText },
   { label: 'Audit Logs', href: '/audit', icon: Scroll, permission: 'canViewAuditLogs' },
   { label: 'Config', href: '/config', icon: Settings, permission: 'canManageFeatureFlags' },

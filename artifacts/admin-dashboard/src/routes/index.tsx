@@ -17,6 +17,7 @@ import BroadcastPage from '@/pages/broadcast/BroadcastPage';
 import MonitoringPage from '@/pages/monitoring/MonitoringPage';
 import AuditPage from '@/pages/audit/AuditPage';
 import ConfigPage from '@/pages/config/ConfigPage';
+import ShortIdsPage from '@/pages/shortids/ShortIdsPage';
 
 /**
  * Application route tree.
@@ -46,6 +47,7 @@ export function AppRoutes() {
           <Route path="/monitoring" element={<MonitoringPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/config" element={<ConfigPage />} />
+          <Route path="/shortids" element={<ShortIdsPage />} />
         </Route>
       </Route>
 
