@@ -100,7 +100,7 @@ async function grantHonor(uid: string, honorId: string, expiresAt?: number) {
   });
 
   // 2026-10-13 (Sumon): Congratulations notification for the recipient.
-  const notifType = type === 'frame' ? 'frame' : 'honor';
+  const notifType = honor.type === 'frame' ? 'frame' : 'honor';
   await set(ref(database, `notifications/${uid}/${Date.now()}`), {
     type: 'honor_granted',
     honorType: notifType,
