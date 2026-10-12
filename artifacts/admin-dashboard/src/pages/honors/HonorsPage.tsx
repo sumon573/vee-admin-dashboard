@@ -118,7 +118,8 @@ export default function HonorsPage() {
   const [selectedUid, setSelectedUid] = useState('');
   const [grantDialog, setGrantDialog] = useState(false);
   const [selectedHonor, setSelectedHonor] = useState('');
-  const [expiryDays, setExpiryDays] = useState('');
+  const [expiryValue, setExpiryValue] = useState('');
+  const [expiryUnit, setExpiryUnit] = useState<'hours' | 'days' | 'months' | 'years' | 'permanent'>('permanent');
   
   const queryClient = useQueryClient();
   
@@ -157,7 +158,16 @@ export default function HonorsPage() {
   
   const handleGrant = () => {
     if (!selectedUid || !selectedHonor) return;
-    const expiresAt = expiryDays ? Date.now() + parseInt(expiryDays) * 24 * 60 * 60 * 1000 : undefined;
+    // 2026-10-13 (Sumon): custom validity — hours/days/months/years/permanent.
+    let expiresAt: number | undefined;
+    if (expiryUnit !== 'permanent' && expiryValue) {
+      const v = parseInt(expiryValue);
+      const ms = expiryUnit === 'hours' ? v * 60 * 60 * 1000
+        : expiryUnit === 'days' ? v * 24 * 60 * 60 * 1000
+        : expiryUnit === 'months' ? v * 30 * 24 * 60 * 60 * 1000
+        : v * 365 * 24 * 60 * 60 * 1000;
+      expiresAt = Date.now() + ms;
+    }
     grantMutation.mutate({ uid: selectedUid, honorId: selectedHonor, expiresAt });
   };
   
@@ -319,13 +329,30 @@ export default function HonorsPage() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium">Expiry (days, optional)</label>
-              <Input
-                type="number"
-                placeholder="Leave empty for permanent"
-                value={expiryDays}
-                onChange={(e) => setExpiryDays(e.target.value)}
-              />
+              <label className="text-sm font-medium">Validity</label>
+              <div className="flex gap-2">
+                <Select value={expiryUnit} onValueChange={(v) => setExpiryUnit(v as any)}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="permanent">Permanent</SelectItem>
+                    <SelectItem value="hours">Hours</SelectItem>
+                    <SelectItem value="days">Days</SelectItem>
+                    <SelectItem value="months">Months</SelectItem>
+                    <SelectItem value="years">Years</SelectItem>
+                  </SelectContent>
+                </Select>
+                {expiryUnit !== 'permanent' && (
+                  <Input
+                    type="number"
+                    placeholder="Amount"
+                    value={expiryValue}
+                    onChange={(e) => setExpiryValue(e.target.value)}
+                    className="flex-1"
+                  />
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
