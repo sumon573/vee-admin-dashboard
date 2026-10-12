@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Award, Search, Plus, X, Crown, Medal, Star } from 'lucide-react';
+import { Award, Search, Plus, X, Crown, Medal, Star, ShieldCheck } from 'lucide-react';
 import { ref, get, set, remove } from 'firebase/database';
 import { rtdb as database } from '@/config/firebase';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,8 @@ interface Honor {
   icon?: string;
   description?: string;
   rarity?: 'common' | 'rare' | 'epic' | 'legendary';
+  /** 2026-10-13 (Sumon): true = super-admin only (e.g. Vee Official badge). Admins/moderators cannot grant. */
+  restricted?: boolean;
 }
 
 interface UserHonor {
@@ -114,12 +117,16 @@ async function revokeHonor(uid: string, honorId: string, type?: 'badge' | 'frame
 }
 
 export default function HonorsPage() {
+  const { isSuperAdmin } = usePermissions();
   const [searchUid, setSearchUid] = useState('');
   const [selectedUid, setSelectedUid] = useState('');
   const [grantDialog, setGrantDialog] = useState(false);
   const [selectedHonor, setSelectedHonor] = useState('');
   const [expiryValue, setExpiryValue] = useState('');
   const [expiryUnit, setExpiryUnit] = useState<'hours' | 'days' | 'months' | 'years' | 'permanent'>('permanent');
+  // 2026-10-13 (Sumon): catalog tabs + search.
+  const [catalogTab, setCatalogTab] = useState<'badge' | 'frame' | 'nameplate'>('badge');
+  const [catalogSearch, setCatalogSearch] = useState('');
   
   const queryClient = useQueryClient();
   
@@ -158,6 +165,12 @@ export default function HonorsPage() {
   
   const handleGrant = () => {
     if (!selectedUid || !selectedHonor) return;
+    // 2026-10-13 (Sumon): special (restricted) honors — super-admin only.
+    const honor = honors?.find((h) => h.id === selectedHonor);
+    if (honor?.restricted && !isSuperAdmin) {
+      toast.error('This is a special honor — only the super admin can grant it.');
+      return;
+    }
     // 2026-10-13 (Sumon): custom validity — hours/days/months/years/permanent.
     let expiresAt: number | undefined;
     if (expiryUnit !== 'permanent' && expiryValue) {
@@ -275,35 +288,75 @@ export default function HonorsPage() {
         </Card>
       )}
       
-      {/* Honors Catalog */}
+      {/* Honors Catalog — 2026-10-13 (Sumon): tabs (Badges/Frames/Nameplates) + search by name.
+          Special (restricted) honors show a shield and are super-admin only. */}
       <Card>
         <CardHeader>
-          <CardTitle>Honors Catalog ({honors?.length || 0})</CardTitle>
+          <CardTitle>Honors Catalog</CardTitle>
+          <div className="flex flex-wrap gap-2 mt-3">
+            {(['badge', 'frame', 'nameplate'] as const).map((t) => (
+              <Button
+                key={t}
+                variant={catalogTab === t ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setCatalogTab(t)}
+              >
+                {t === 'badge' ? 'Badges' : t === 'frame' ? 'Frames' : 'Nameplates'}
+              </Button>
+            ))}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name..."
+                value={catalogSearch}
+                onChange={(e) => setCatalogSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {honorsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-24 w-full" />)}
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {honors?.map((honor) => (
-                <div key={honor.id} className="p-4 rounded-lg border">
-                  <div className="flex items-center gap-2 mb-2">
-                    {getTypeIcon(honor.type)}
-                    <span className="font-medium">{honor.name}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Badge variant="outline">{honor.type}</Badge>
-                    {honor.rarity && <Badge className={getRarityColor(honor.rarity)}>{honor.rarity}</Badge>}
-                  </div>
-                  {honor.description && (
-                    <p className="text-sm text-muted-foreground mt-2">{honor.description}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          ) : (() => {
+            const filtered = (honors || [])
+              .filter((h) => h.type === catalogTab)
+              .filter((h) => !catalogSearch || h.name.toLowerCase().includes(catalogSearch.toLowerCase()));
+            return filtered.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-6 text-center">No {catalogTab}s found.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {filtered.map((honor) => {
+                  const locked = honor.restricted && !isSuperAdmin;
+                  return (
+                    <div key={honor.id} className={`p-4 rounded-lg border ${locked ? 'opacity-60' : ''}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        {getTypeIcon(honor.type)}
+                        <span className="font-medium">{honor.name}</span>
+                        {honor.restricted && (
+                          <Badge className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1">
+                            <ShieldCheck className="h-3 w-3" /> Special
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Badge variant="outline">{honor.type}</Badge>
+                        {honor.rarity && <Badge className={getRarityColor(honor.rarity)}>{honor.rarity}</Badge>}
+                      </div>
+                      {honor.description && (
+                        <p className="text-sm text-muted-foreground mt-2">{honor.description}</p>
+                      )}
+                      {locked && (
+                        <p className="text-xs text-purple-700 mt-2">Only the super admin can grant this.</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
       
@@ -323,7 +376,9 @@ export default function HonorsPage() {
                 <SelectTrigger><SelectValue placeholder="Choose honor..." /></SelectTrigger>
                 <SelectContent>
                   {honors?.map((h) => (
-                    <SelectItem key={h.id} value={h.id}>{h.name} ({h.type})</SelectItem>
+                    <SelectItem key={h.id} value={h.id} disabled={h.restricted && !isSuperAdmin}>
+                      {h.name} ({h.type}){h.restricted ? ' 🛡️ Special' : ''}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
