@@ -98,6 +98,19 @@ async function grantHonor(uid: string, honorId: string, expiresAt?: number) {
     honorId,
     timestamp: Date.now(),
   });
+
+  // 2026-10-13 (Sumon): Congratulations notification for the recipient.
+  const notifType = type === 'frame' ? 'frame' : 'honor';
+  await set(ref(database, `notifications/${uid}/${Date.now()}`), {
+    type: 'honor_granted',
+    honorType: notifType,
+    honorId,
+    honorName: honor.name,
+    title: 'Congratulations!',
+    body: notifType === 'frame' ? 'Got New Frame' : 'Got New Honor',
+    timestamp: Date.now(),
+    read: false,
+  });
 }
 
 async function revokeHonor(uid: string, honorId: string, type?: 'badge' | 'frame' | 'nameplate') {
