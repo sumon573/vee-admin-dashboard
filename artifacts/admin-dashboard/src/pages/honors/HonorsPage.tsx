@@ -140,6 +140,12 @@ export default function HonorsPage() {
   // 2026-10-13 (Sumon): catalog tabs + search.
   const [catalogTab, setCatalogTab] = useState<'badge' | 'frame' | 'nameplate'>('badge');
   const [catalogSearch, setCatalogSearch] = useState('');
+  // 2026-10-13 (Sumon): Add-to-catalog form state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newIcon, setNewIcon] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newRestricted, setNewRestricted] = useState(false);
   
   const queryClient = useQueryClient();
   
@@ -305,7 +311,13 @@ export default function HonorsPage() {
           Special (restricted) honors show a shield and are super-admin only. */}
       <Card>
         <CardHeader>
-          <CardTitle>Honors Catalog</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Honors Catalog</CardTitle>
+            {/* 2026-10-13 (Sumon): Add new badge/frame to catalog */}
+            <Button size="sm" onClick={() => setShowAddForm(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Add
+            </Button>
+          </div>
           <div className="flex flex-wrap gap-2 mt-3">
             {(['badge', 'frame', 'nameplate'] as const).map((t) => (
               <Button
@@ -427,6 +439,76 @@ export default function HonorsPage() {
             <Button variant="outline" onClick={() => setGrantDialog(false)}>Cancel</Button>
             <Button onClick={handleGrant} disabled={!selectedHonor || grantMutation.isPending}>
               {grantMutation.isPending ? 'Granting...' : 'Grant'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add to Catalog Dialog — 2026-10-13 (Sumon) */}
+      <Dialog open={showAddForm} onOpenChange={setShowAddForm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add {catalogTab === 'badge' ? 'Badge' : catalogTab === 'frame' ? 'Frame' : 'Nameplate'}</DialogTitle>
+            <DialogDescription>Add a new honor to the catalog.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Name</label>
+              <input
+                className="w-full mt-1 px-3 py-2 border rounded-md bg-background"
+                placeholder="e.g. Vee Official"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Icon URL</label>
+              <input
+                className="w-full mt-1 px-3 py-2 border rounded-md bg-background"
+                placeholder="https://..."
+                value={newIcon}
+                onChange={(e) => setNewIcon(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <input
+                className="w-full mt-1 px-3 py-2 border rounded-md bg-background"
+                placeholder="e.g. Grant to Vee Official Team"
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="restricted"
+                checked={newRestricted}
+                onChange={(e) => setNewRestricted(e.target.checked)}
+              />
+              <label htmlFor="restricted" className="text-sm">🛡️ Special (super-admin only)</label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddForm(false)}>Cancel</Button>
+            <Button
+              onClick={async () => {
+                if (!newName.trim()) return;
+                const id = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                await set(ref(database, `honors_catalog/${id}`), {
+                  name: newName.trim(),
+                  type: catalogTab,
+                  ...(newIcon.trim() && { icon: newIcon.trim() }),
+                  ...(newDesc.trim() && { description: newDesc.trim() }),
+                  ...(newRestricted && { restricted: true }),
+                  createdAt: Date.now(),
+                });
+                setNewName(''); setNewIcon(''); setNewDesc(''); setNewRestricted(false);
+                setShowAddForm(false);
+              }}
+              disabled={!newName.trim()}
+            >
+              Add
             </Button>
           </DialogFooter>
         </DialogContent>
