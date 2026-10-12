@@ -28,8 +28,11 @@ interface Honor {
 
 interface UserHonor {
   honorId: string;
-  grantedAt: number;
+  type?: 'badge' | 'frame' | 'nameplate';
+  grantedAt?: number;
+  obtainedAt?: number;
   expiresAt?: number;
+  validity?: 'permanent' | number;
   grantedBy?: string;
 }
 
@@ -49,12 +52,16 @@ async function getHonors(): Promise<Honor[]> {
 
 async function getUserHonors(uid: string): Promise<UserHonor[]> {
   try {
-    const snapshot = await get(ref(database, `users/${uid}/honors`));
-    if (!snapshot.exists()) return [];
+    // 2026-10-13: Read from app's paths (badges, frames, nameplates)
     const honors: UserHonor[] = [];
-    snapshot.forEach((child) => {
-      honors.push({ honorId: child.key!, ...child.val() });
-    });
+    for (const node of ['badges', 'frames', 'nameplates'] as const) {
+      const snapshot = await get(ref(database, `users/${uid}/${node}`));
+      if (snapshot.exists()) {
+        snapshot.forEach((child) => {
+          honors.push({ honorId: child.key!, type: node.slice(0, -1) as 'badge' | 'frame' | 'nameplate', ...child.val() });
+        });
+      }
+    }
     return honors;
   } catch {
     return [];
@@ -62,10 +69,22 @@ async function getUserHonors(uid: string): Promise<UserHonor[]> {
 }
 
 async function grantHonor(uid: string, honorId: string, expiresAt?: number) {
-  const honorRef = ref(database, `users/${uid}/honors/${honorId}`);
+  // 2026-10-13: Write to the app's expected paths (users/{uid}/badges|frames|nameplates)
+  // with the GrantedBadge/GrantedFrame format. Official manual grants use source: 'official'.
+  const honorSnap = await get(ref(database, `honors_catalog/${honorId}`));
+  if (!honorSnap.exists()) throw new Error('Honor not found in catalog');
+  const honor = honorSnap.val() as { name: string; type: 'badge' | 'frame' | 'nameplate'; icon?: string; description?: string };
+  
+  const node = honor.type === 'badge' ? 'badges' : honor.type === 'frame' ? 'frames' : 'nameplates';
+  const honorRef = ref(database, `users/${uid}/${node}/${honorId}`);
   await set(honorRef, {
-    grantedAt: Date.now(),
-    ...(expiresAt && { expiresAt }),
+    id: honorId,
+    name: honor.name,
+    ...(honor.icon && { icon: honor.icon }),
+    ...(honor.description && { description: honor.description }),
+    obtainedAt: Date.now(),
+    validity: expiresAt ? expiresAt : 'permanent',
+    source: 'official',
     grantedBy: 'admin',
   });
   
@@ -78,8 +97,12 @@ async function grantHonor(uid: string, honorId: string, expiresAt?: number) {
   });
 }
 
-async function revokeHonor(uid: string, honorId: string) {
-  await remove(ref(database, `users/${uid}/honors/${honorId}`));
+async function revokeHonor(uid: string, honorId: string, type?: 'badge' | 'frame' | 'nameplate') {
+  // 2026-10-13: Remove from the correct app path. If type unknown, try all three.
+  const nodes = type ? [type === 'badge' ? 'badges' : type === 'frame' ? 'frames' : 'nameplates'] : ['badges', 'frames', 'nameplates'];
+  for (const node of nodes) {
+    await remove(ref(database, `users/${uid}/${node}/${honorId}`));
+  }
   
   // Audit log
   await set(ref(database, `admin_audit/${Date.now()}`), {
