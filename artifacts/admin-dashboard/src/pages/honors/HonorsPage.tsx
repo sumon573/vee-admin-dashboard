@@ -53,6 +53,37 @@ async function getHonors(): Promise<Honor[]> {
   }
 }
 
+/**
+ * 2026-10-13 (Sumon): Get all users holding a specific honor.
+ * Returns list of {uid, name, photoURL, vId, obtainedAt}.
+ */
+async function getHonorHolders(
+  honorId: string,
+  type: 'badge' | 'frame' | 'nameplate',
+): Promise<Array<{ uid: string; name: string; photoURL: string; vId: string; obtainedAt: number }>> {
+  const node = type === 'badge' ? 'badges' : type === 'frame' ? 'frames' : 'nameplates';
+  const usersSnap = await get(ref(database, 'users'));
+  if (!usersSnap.exists()) return [];
+  const holders: Array<{ uid: string; name: string; photoURL: string; vId: string; obtainedAt: number }> = [];
+  usersSnap.forEach((userChild) => {
+    const uid = userChild.key!;
+    const userData = userChild.val();
+    const honor = userData?.[node]?.[honorId];
+    if (honor) {
+      holders.push({
+        uid,
+        name: userData.name || 'Unknown',
+        photoURL: userData.photoURL || '',
+        vId: userData.vId || '',
+        obtainedAt: honor.obtainedAt || 0,
+      });
+    }
+  });
+  // Newest first
+  holders.sort((a, b) => b.obtainedAt - a.obtainedAt);
+  return holders;
+}
+
 async function getUserHonors(uid: string): Promise<UserHonor[]> {
   try {
     // 2026-10-13: Read from app's paths (badges, frames, nameplates)
@@ -129,6 +160,31 @@ async function revokeHonor(uid: string, honorId: string, type?: 'badge' | 'frame
   });
 }
 
+/** 2026-10-13 (Sumon): Update validity/expiry of a granted honor. */
+async function updateHonorValidity(
+  uid: string,
+  honorId: string,
+  type: 'badge' | 'frame' | 'nameplate',
+  expiresAt: number | 'permanent',
+) {
+  const node = type === 'badge' ? 'badges' : type === 'frame' ? 'frames' : 'nameplates';
+  const honorRef = ref(database, `users/${uid}/${node}/${honorId}`);
+  const snap = await get(honorRef);
+  if (!snap.exists()) throw new Error('Honor not found');
+  await set(honorRef, {
+    ...snap.val(),
+    validity: expiresAt === 'permanent' ? 'permanent' : expiresAt,
+    ...(expiresAt !== 'permanent' ? { expiresAt } : {}),
+  });
+  await set(ref(database, `admin_audit/${Date.now()}`), {
+    action: 'update_honor_validity',
+    targetUid: uid,
+    honorId,
+    expiresAt: expiresAt === 'permanent' ? 'permanent' : expiresAt,
+    timestamp: Date.now(),
+  });
+}
+
 export default function HonorsPage() {
   const { isSuperAdmin } = usePermissions();
   const [searchUid, setSearchUid] = useState('');
@@ -138,6 +194,14 @@ export default function HonorsPage() {
   const [selectedHonor, setSelectedHonor] = useState('');
   const [expiryValue, setExpiryValue] = useState('');
   const [expiryUnit, setExpiryUnit] = useState<'hours' | 'days' | 'months' | 'years' | 'permanent'>('permanent');
+  // 2026-10-13 (Sumon): Edit validity dialog state
+  const [editValidityDialog, setEditValidityDialog] = useState<{ honorId: string; type: 'badge' | 'frame' | 'nameplate'; current: string } | null>(null);
+  const [editExpiryValue, setEditExpiryValue] = useState('');
+  const [editExpiryUnit, setEditExpiryUnit] = useState<'hours' | 'days' | 'months' | 'years' | 'permanent'>('permanent');
+  // 2026-10-13 (Sumon): Selected user profile (name + DP)
+  const [selectedUserProfile, setSelectedUserProfile] = useState<{ name: string; photoURL: string; vId: string } | null>(null);
+  // 2026-10-13 (Sumon): Holders dialog — who received each honor
+  const [holdersDialog, setHoldersDialog] = useState<{ honorId: string; name: string; type: 'badge' | 'frame' | 'nameplate' } | null>(null);
   // 2026-10-13 (Sumon): catalog tabs + search.
   const [catalogTab, setCatalogTab] = useState<'badge' | 'frame' | 'nameplate'>('badge');
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -181,6 +245,30 @@ export default function HonorsPage() {
       queryClient.invalidateQueries({ queryKey: ['user-honors', selectedUid] });
     },
     onError: () => toast.error('Failed to revoke honor'),
+  });
+
+  // 2026-10-13 (Sumon): Update validity mutation
+  const updateValidityMutation = useMutation({
+    mutationFn: ({ uid, honorId, type, expiresAt }: {
+      uid: string; honorId: string; type: 'badge' | 'frame' | 'nameplate'; expiresAt: number | 'permanent';
+    }) => updateHonorValidity(uid, honorId, type, expiresAt),
+    onSuccess: () => {
+      toast.success('Validity updated');
+      queryClient.invalidateQueries({ queryKey: ['user-honors', selectedUid] });
+      setEditValidityDialog(null);
+    },
+    onError: () => toast.error('Failed to update validity'),
+  });
+
+  // 2026-10-13 (Sumon): Fetch user profile when UID selected
+  const { data: userProfile } = useQuery({
+    queryKey: ['honor-user-profile', selectedUid],
+    queryFn: async () => {
+      if (!selectedUid) return null;
+      const { getUserById } = await import('@/services/userService');
+      return getUserById(selectedUid);
+    },
+    enabled: !!selectedUid,
   });
   
   const handleGrant = () => {
@@ -285,7 +373,21 @@ export default function HonorsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>User Honors: {selectedUid.substring(0, 12)}...</CardTitle>
+              <CardTitle className="flex items-center gap-3">
+                {userProfile?.photoURL ? (
+                  <img src={userProfile.photoURL} alt="" className="w-10 h-10 rounded-full object-cover" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                    <span className="text-sm font-bold">{userProfile?.name?.[0]?.toUpperCase() || '?'}</span>
+                  </div>
+                )}
+                <div>
+                  <div>{userProfile?.name || selectedUid.substring(0, 12) + '...'}</div>
+                  {userProfile?.vId && (
+                    <div className="text-xs text-muted-foreground font-normal">vId: {userProfile.vId}</div>
+                  )}
+                </div>
+              </CardTitle>
               <Button onClick={() => setGrantDialog(true)} size="sm">
                 <Plus className="h-4 w-4 mr-1" /> Grant Honor
               </Button>
@@ -319,6 +421,24 @@ export default function HonorsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          title="Edit validity"
+                          onClick={() => {
+                            const t = uh.type || honor?.type || 'badge';
+                            setEditValidityDialog({
+                              honorId: uh.honorId,
+                              type: t as 'badge' | 'frame' | 'nameplate',
+                              current: uh.validity === 'permanent' ? 'Permanent' : uh.expiresAt ? new Date(uh.expiresAt).toLocaleDateString() : 'Unknown',
+                            });
+                            setEditExpiryUnit('permanent');
+                            setEditExpiryValue('');
+                          }}
+                        >
+                          ⏱
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Remove honor"
                           onClick={() => revokeMutation.mutate({ uid: selectedUid, honorId: uh.honorId })}
                         >
                           <X className="h-4 w-4" />
@@ -402,6 +522,15 @@ export default function HonorsPage() {
                       {locked && (
                         <p className="text-xs text-purple-700 mt-2">Only the super admin can grant this.</p>
                       )}
+                      {/* 2026-10-13 (Sumon): Holders — who received this honor */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 w-full"
+                        onClick={() => setHoldersDialog({ honorId: honor.id, name: honor.name, type: honor.type })}
+                      >
+                        👥 View Holders
+                      </Button>
                     </div>
                   );
                 })}
@@ -465,6 +594,66 @@ export default function HonorsPage() {
             <Button variant="outline" onClick={() => setGrantDialog(false)}>Cancel</Button>
             <Button onClick={handleGrant} disabled={!selectedHonor || grantMutation.isPending}>
               {grantMutation.isPending ? 'Granting...' : 'Grant'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Validity Dialog — 2026-10-13 (Sumon): change/reduce/extend honor validity */}
+      <Dialog open={!!editValidityDialog} onOpenChange={(o) => !o && setEditValidityDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Validity</DialogTitle>
+            <DialogDescription>
+              Current: {editValidityDialog?.current} — set new validity for this honor.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <Select value={editExpiryUnit} onValueChange={(v: any) => setEditExpiryUnit(v)}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="permanent">Permanent</SelectItem>
+                <SelectItem value="hours">Hours</SelectItem>
+                <SelectItem value="days">Days</SelectItem>
+                <SelectItem value="months">Months</SelectItem>
+                <SelectItem value="years">Years</SelectItem>
+              </SelectContent>
+            </Select>
+            {editExpiryUnit !== 'permanent' && (
+              <Input
+                type="number"
+                min="1"
+                placeholder="Amount"
+                value={editExpiryValue}
+                onChange={(e) => setEditExpiryValue(e.target.value)}
+                className="flex-1"
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditValidityDialog(null)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (!editValidityDialog || !selectedUid) return;
+                let expiresAt: number | 'permanent' = 'permanent';
+                if (editExpiryUnit !== 'permanent' && editExpiryValue) {
+                  const v = parseInt(editExpiryValue);
+                  const ms = editExpiryUnit === 'hours' ? v * 60 * 60 * 1000
+                    : editExpiryUnit === 'days' ? v * 24 * 60 * 60 * 1000
+                    : editExpiryUnit === 'months' ? v * 30 * 24 * 60 * 60 * 1000
+                    : v * 365 * 24 * 60 * 60 * 1000;
+                  expiresAt = Date.now() + ms;
+                }
+                updateValidityMutation.mutate({
+                  uid: selectedUid,
+                  honorId: editValidityDialog.honorId,
+                  type: editValidityDialog.type,
+                  expiresAt,
+                });
+              }}
+              disabled={updateValidityMutation.isPending || (editExpiryUnit !== 'permanent' && !editExpiryValue)}
+            >
+              {updateValidityMutation.isPending ? 'Updating...' : 'Update'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -536,6 +725,53 @@ export default function HonorsPage() {
             >
               Add
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Holders Dialog — 2026-10-13 (Sumon): who received this honor */}
+      <Dialog open={!!holdersDialog} onOpenChange={(o) => !o && setHoldersDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>👥 {holdersDialog?.name} — Holders</DialogTitle>
+            <DialogDescription>
+              All users who received this {holdersDialog?.type}.
+            </DialogDescription>
+          </DialogHeader>
+          {(() => {
+            const { data: holders, isLoading } = useQuery({
+              queryKey: ['honor-holders', holdersDialog?.honorId, holdersDialog?.type],
+              queryFn: () => holdersDialog ? getHonorHolders(holdersDialog.honorId, holdersDialog.type) : [],
+              enabled: !!holdersDialog,
+            });
+            if (isLoading) return <p className="text-center py-4">Loading...</p>;
+            if (!holders || holders.length === 0) {
+              return <p className="text-center text-muted-foreground py-4">No holders yet</p>;
+            }
+            return (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {holders.map((h) => (
+                  <div key={h.uid} className="flex items-center gap-3 p-2 rounded-lg border">
+                    {h.photoURL ? (
+                      <img src={h.photoURL} alt="" className="w-10 h-10 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                        <span className="font-bold">{h.name[0]?.toUpperCase()}</span>
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="font-medium">{h.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {h.vId ? `vId: ${h.vId} • ` : ''}Obtained {new Date(h.obtainedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHoldersDialog(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
