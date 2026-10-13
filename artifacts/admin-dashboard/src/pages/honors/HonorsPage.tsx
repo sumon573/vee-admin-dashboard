@@ -151,7 +151,18 @@ async function revokeHonor(uid: string, honorId: string, type?: 'badge' | 'frame
   for (const node of nodes) {
     await remove(ref(database, `users/${uid}/${node}/${honorId}`));
   }
-  
+
+  // 2026-10-13 (Sumon): If revoking a frame that is currently ACTIVE,
+  // also clear users/{uid}/activeFrame — otherwise the frame stays visible on DP.
+  if (!type || type === 'frame') {
+    try {
+      const activeSnap = await get(ref(database, `users/${uid}/activeFrame`));
+      if (activeSnap.exists() && activeSnap.val() === honorId) {
+        await remove(ref(database, `users/${uid}/activeFrame`));
+      }
+    } catch { /* non-critical */ }
+  }
+
   // Audit log
   await set(ref(database, `admin_audit/${Date.now()}`), {
     action: 'revoke_honor',
