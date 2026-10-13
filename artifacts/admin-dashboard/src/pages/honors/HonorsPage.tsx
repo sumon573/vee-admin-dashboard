@@ -730,6 +730,9 @@ export default function HonorsPage() {
                   ...(newRestricted && { restricted: true }),
                   createdAt: Date.now(),
                 });
+                // 2026-10-13 (Sumon): Refresh catalog list after add — items must stay visible permanently
+                queryClient.invalidateQueries({ queryKey: ['honors-catalog'] });
+                toast.success('Added to catalog');
                 setNewName(''); setNewIcon(''); setNewDesc(''); setNewRestricted(false);
                 setShowAddForm(false);
               }}
