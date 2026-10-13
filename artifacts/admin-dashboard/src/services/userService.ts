@@ -169,8 +169,14 @@ export async function addDiamonds(
 ): Promise<void> {
   const database = requireRtdb();
 
+  const newTotal = currentDiamonds + amount;
+  // 2026-10-13: App reads from wallets/{uid}/balance (real-time) — write there.
+  // Also keep users/{uid}/diamonds in sync (legacy field).
   await update(ref(database, `users/${uid}`), {
-    diamonds: currentDiamonds + amount,
+    diamonds: newTotal,
+  });
+  await update(ref(database, `wallets/${uid}`), {
+    balance: newTotal,
   });
 
   await logModerationAction({
@@ -179,7 +185,7 @@ export async function addDiamonds(
     action: 'add_diamonds',
     targetUid: uid,
     targetName,
-    details: `Added ${amount} diamonds (total: ${currentDiamonds + amount})`,
+    details: `Added ${amount} diamonds (total: ${newTotal})`,
   });
 }
 
@@ -197,8 +203,13 @@ export async function removeDiamonds(
   const current = Number(snapshot.val() ?? 0);
   const newTotal = Math.max(0, current - amount);
 
+  // 2026-10-13: App reads from wallets/{uid}/balance (real-time) — write there.
+  // Also keep users/{uid}/diamonds in sync (legacy field).
   await update(ref(database, `users/${uid}`), {
     diamonds: newTotal,
+  });
+  await update(ref(database, `wallets/${uid}`), {
+    balance: newTotal,
   });
 
   await logModerationAction({
