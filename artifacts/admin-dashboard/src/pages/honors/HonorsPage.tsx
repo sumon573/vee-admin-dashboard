@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Award, Search, Plus, X, Crown, Medal, Star, ShieldCheck } from 'lucide-react';
+import { Award, Search, Plus, X, Crown, Medal, Star, ShieldCheck, Upload } from 'lucide-react';
 import { ref, get, set, remove } from 'firebase/database';
-import { rtdb as database } from '@/config/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { rtdb as database, storage } from '@/config/firebase';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -223,6 +224,7 @@ export default function HonorsPage() {
   const [newIcon, setNewIcon] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newRestricted, setNewRestricted] = useState(false);
+  const [uploading, setUploading] = useState(false);
   
   const queryClient = useQueryClient();
   
@@ -696,6 +698,43 @@ export default function HonorsPage() {
                 value={newIcon}
                 onChange={(e) => setNewIcon(e.target.value)}
               />
+              {/* 2026-10-13 (Sumon): Upload image directly instead of pasting URL */}
+              <div className="mt-2 flex items-center gap-2">
+                <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 border rounded-md text-sm bg-muted hover:bg-muted/80">
+                  <Upload size={16} />
+                  {uploading ? 'Uploading...' : 'Upload Image'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file || !storage) {
+                        if (!storage) toast.error('Storage not configured');
+                        return;
+                      }
+                      setUploading(true);
+                      try {
+                        const fileName = `honors/${catalogTab}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+                        const sRef = storageRef(storage, fileName);
+                        await uploadBytes(sRef, file);
+                        const url = await getDownloadURL(sRef);
+                        setNewIcon(url);
+                        toast.success('Image uploaded');
+                      } catch (err) {
+                        toast.error('Upload failed');
+                      } finally {
+                        setUploading(false);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                </label>
+                {newIcon && (
+                  <img src={newIcon} alt="preview" className="w-10 h-10 rounded object-contain border" />
+                )}
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium">Description</label>
