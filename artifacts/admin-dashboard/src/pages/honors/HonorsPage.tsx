@@ -277,14 +277,21 @@ export default function HonorsPage() {
     onError: () => toast.error('Failed to update validity'),
   });
 
-  // 2026-10-13 (Sumon): Delete catalog item mutation
-  const [deleteDialog, setDeleteDialog] = useState<{ id: string; name: string; type: string } | null>(null);
+  // 2026-10-13 (Sumon): Delete catalog item — uses native confirm to avoid Dialog state bugs.
+  // The Radix Dialog was showing the wrong item name due to stale state; native confirm is bulletproof.
+  const handleDeleteHonor = (honor: Honor) => {
+    const confirmed = window.confirm(
+      `Remove "${honor.name}" (${honor.type}) from the catalog permanently?\n\nUsers who already received it will keep it.`
+    );
+    if (confirmed) {
+      deleteCatalogMutation.mutate(honor.id);
+    }
+  };
   const deleteCatalogMutation = useMutation({
     mutationFn: (honorId: string) => remove(ref(database, `honors_catalog/${honorId}`)),
     onSuccess: () => {
       toast.success('Removed from catalog');
       queryClient.invalidateQueries({ queryKey: ['honors-catalog'] });
-      setDeleteDialog(null);
     },
     onError: () => toast.error('Failed to remove from catalog'),
   });
@@ -593,12 +600,12 @@ export default function HonorsPage() {
                       >
                         ✏️ Edit
                       </Button>
-                      {/* 2026-10-13 (Sumon): Remove from catalog */}
+                      {/* 2026-10-13 (Sumon): Remove from catalog — native confirm, no Dialog state bugs */}
                       <Button
                         variant="outline"
                         size="sm"
                         className="mt-2 w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                        onClick={() => setDeleteDialog({ id: honor.id, name: honor.name, type: honor.type })}
+                        onClick={() => handleDeleteHonor(honor)}
                       >
                         🗑️ Remove
                       </Button>
@@ -725,28 +732,6 @@ export default function HonorsPage() {
               disabled={updateValidityMutation.isPending || (editExpiryUnit !== 'permanent' && !editExpiryValue)}
             >
               {updateValidityMutation.isPending ? 'Updating...' : 'Update'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog — 2026-10-13 (Sumon): remove item from catalog */}
-      <Dialog key={deleteDialog?.id || 'none'} open={!!deleteDialog} onOpenChange={(o) => !o && setDeleteDialog(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove from Catalog</DialogTitle>
-            <DialogDescription>
-              Remove "{deleteDialog?.name}" ({deleteDialog?.type}) from the catalog permanently? Users who already received it will keep it.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              onClick={() => deleteDialog && deleteCatalogMutation.mutate(deleteDialog.id)}
-              disabled={deleteCatalogMutation.isPending}
-            >
-              {deleteCatalogMutation.isPending ? 'Removing...' : 'Remove'}
             </Button>
           </DialogFooter>
         </DialogContent>
