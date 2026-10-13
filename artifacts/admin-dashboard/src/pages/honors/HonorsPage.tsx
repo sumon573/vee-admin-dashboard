@@ -46,7 +46,10 @@ async function getHonors(): Promise<Honor[]> {
     if (!snapshot.exists()) return [];
     const honors: Honor[] = [];
     snapshot.forEach((child) => {
-      honors.push({ id: child.key!, ...child.val() });
+      // 2026-10-13 (Sumon): FIX — child.key MUST win over any stale `id` inside the value.
+      // Wrong order ({id: key, ...val}) let a copied `id` field overwrite the real key,
+      // causing the delete dialog to target the wrong item.
+      honors.push({ ...child.val(), id: child.key! });
     });
     return honors;
   } catch {
