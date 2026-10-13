@@ -274,6 +274,18 @@ export default function HonorsPage() {
     onError: () => toast.error('Failed to update validity'),
   });
 
+  // 2026-10-13 (Sumon): Delete catalog item mutation
+  const [deleteDialog, setDeleteDialog] = useState<{ id: string; name: string; type: string } | null>(null);
+  const deleteCatalogMutation = useMutation({
+    mutationFn: (honorId: string) => remove(ref(database, `honors_catalog/${honorId}`)),
+    onSuccess: () => {
+      toast.success('Removed from catalog');
+      queryClient.invalidateQueries({ queryKey: ['honors-catalog'] });
+      setDeleteDialog(null);
+    },
+    onError: () => toast.error('Failed to remove from catalog'),
+  });
+
   // 2026-10-13 (Sumon): Fetch user profile when UID selected
   const { data: userProfile } = useQuery({
     queryKey: ['honor-user-profile', selectedUid],
@@ -545,6 +557,15 @@ export default function HonorsPage() {
                       >
                         👥 View Holders
                       </Button>
+                      {/* 2026-10-13 (Sumon): Remove from catalog */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                        onClick={() => setDeleteDialog({ id: honor.id, name: honor.name, type: honor.type })}
+                      >
+                        🗑️ Remove
+                      </Button>
                     </div>
                   );
                 })}
@@ -668,6 +689,28 @@ export default function HonorsPage() {
               disabled={updateValidityMutation.isPending || (editExpiryUnit !== 'permanent' && !editExpiryValue)}
             >
               {updateValidityMutation.isPending ? 'Updating...' : 'Update'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog — 2026-10-13 (Sumon): remove item from catalog */}
+      <Dialog open={!!deleteDialog} onOpenChange={(o) => !o && setDeleteDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove from Catalog</DialogTitle>
+            <DialogDescription>
+              Remove "{deleteDialog?.name}" ({deleteDialog?.type}) from the catalog permanently? Users who already received it will keep it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteDialog && deleteCatalogMutation.mutate(deleteDialog.id)}
+              disabled={deleteCatalogMutation.isPending}
+            >
+              {deleteCatalogMutation.isPending ? 'Removing...' : 'Remove'}
             </Button>
           </DialogFooter>
         </DialogContent>
