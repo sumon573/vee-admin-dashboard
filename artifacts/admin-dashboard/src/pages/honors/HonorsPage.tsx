@@ -721,7 +721,22 @@ export default function HonorsPage() {
             <Button
               onClick={async () => {
                 if (!newName.trim()) return;
-                const id = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                // 2026-10-13 (Sumon): ID must be unique across types — a badge and frame
+                // with the same name (e.g. "Vee Official") must NOT overwrite each other
+                const baseId = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                let id = baseId;
+                let counter = 2;
+                // If ID exists, make unique by appending type, then counter
+                let existing = await get(ref(database, `honors_catalog/${id}`));
+                if (existing.exists()) {
+                  id = `${baseId}-${catalogTab}`;
+                  existing = await get(ref(database, `honors_catalog/${id}`));
+                  while (existing.exists()) {
+                    id = `${baseId}-${catalogTab}-${counter}`;
+                    counter++;
+                    existing = await get(ref(database, `honors_catalog/${id}`));
+                  }
+                }
                 await set(ref(database, `honors_catalog/${id}`), {
                   name: newName.trim(),
                   type: catalogTab,
