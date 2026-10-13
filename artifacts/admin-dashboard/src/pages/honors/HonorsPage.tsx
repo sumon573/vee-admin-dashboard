@@ -28,6 +28,9 @@ interface Honor {
   rarity?: 'common' | 'rare' | 'epic' | 'legendary';
   /** 2026-10-13 (Sumon): true = super-admin only (e.g. Vee Official badge). Admins/moderators cannot grant. */
   restricted?: boolean;
+  /** 2026-10-13 (Sumon): Server APNG URL for animated frames (VPS static). */
+  animationUrl?: string;
+  createdAt?: number;
 }
 
 interface UserHonor {
@@ -111,7 +114,7 @@ async function grantHonor(uid: string, honorId: string, expiresAt?: number) {
   // with the GrantedBadge/GrantedFrame format. Official manual grants use source: 'official'.
   const honorSnap = await get(ref(database, `honors_catalog/${honorId}`));
   if (!honorSnap.exists()) throw new Error('Honor not found in catalog');
-  const honor = honorSnap.val() as { name: string; type: 'badge' | 'frame' | 'nameplate'; icon?: string; description?: string };
+  const honor = honorSnap.val() as { name: string; type: 'badge' | 'frame' | 'nameplate'; icon?: string; description?: string; animationUrl?: string };
   
   const node = honor.type === 'badge' ? 'badges' : honor.type === 'frame' ? 'frames' : 'nameplates';
   const honorRef = ref(database, `users/${uid}/${node}/${honorId}`);
@@ -120,6 +123,8 @@ async function grantHonor(uid: string, honorId: string, expiresAt?: number) {
     name: honor.name,
     ...(honor.icon && { icon: honor.icon }),
     ...(honor.description && { description: honor.description }),
+    // 2026-10-13 (Sumon): frame animation URL travels with the grant
+    ...(honor.type === 'frame' && honor.animationUrl && { animationUrl: honor.animationUrl }),
     obtainedAt: Date.now(),
     validity: expiresAt ? expiresAt : 'permanent',
     source: 'official',
@@ -228,6 +233,8 @@ export default function HonorsPage() {
   const [newDesc, setNewDesc] = useState('');
   const [newRestricted, setNewRestricted] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // 2026-10-13 (Sumon): Server APNG URL for animated frames
+  const [newAnimationUrl, setNewAnimationUrl] = useState('');
   
   const queryClient = useQueryClient();
   
@@ -303,6 +310,8 @@ export default function HonorsPage() {
   const [editDesc, setEditDesc] = useState('');
   const [editRestricted, setEditRestricted] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
+  // 2026-10-13 (Sumon): Server APNG URL for animated frames
+  const [editAnimationUrl, setEditAnimationUrl] = useState('');
   const updateCatalogMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Honor> }) =>
       set(ref(database, `honors_catalog/${id}`), { ...data, type: editDialog?.type }),
@@ -596,6 +605,7 @@ export default function HonorsPage() {
                           setEditIcon(honor.icon || '');
                           setEditDesc(honor.description || '');
                           setEditRestricted(!!honor.restricted);
+                          setEditAnimationUrl(honor.animationUrl || '');
                         }}
                       >
                         ✏️ Edit
@@ -789,6 +799,20 @@ export default function HonorsPage() {
               <label className="text-sm font-medium">Description</label>
               <Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} placeholder="Description" />
             </div>
+            {/* 2026-10-13 (Sumon): Server APNG URL — frames load animation from server, not APK */}
+            {editDialog?.type === 'frame' && (
+              <div>
+                <label className="text-sm font-medium">Animation URL (APNG)</label>
+                <Input
+                  value={editAnimationUrl}
+                  onChange={(e) => setEditAnimationUrl(e.target.value)}
+                  placeholder="https://vee-club.duckdns.org/static/frames/....png"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  APNG on Sumon's VPS. App downloads + caches it. Leave empty to use the bundled static frame.
+                </p>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -815,6 +839,8 @@ export default function HonorsPage() {
                     ...(editIcon.trim() && { icon: editIcon.trim() }),
                     ...(editDesc.trim() && { description: editDesc.trim() }),
                     ...(editRestricted ? { restricted: true } : {}),
+                    // 2026-10-13 (Sumon): frame animation URL (server-hosted APNG)
+                    ...(editDialog.type === 'frame' && editAnimationUrl.trim() && { animationUrl: editAnimationUrl.trim() }),
                     createdAt: (editDialog as any).createdAt || Date.now(),
                   },
                 });
@@ -899,6 +925,21 @@ export default function HonorsPage() {
                 onChange={(e) => setNewDesc(e.target.value)}
               />
             </div>
+            {/* 2026-10-13 (Sumon): Server APNG URL — frames load animation from server, not APK */}
+            {catalogTab === 'frame' && (
+              <div>
+                <label className="text-sm font-medium">Animation URL (APNG)</label>
+                <input
+                  className="w-full mt-1 px-3 py-2 border rounded-md bg-background"
+                  placeholder="https://vee-club.duckdns.org/static/frames/....png"
+                  value={newAnimationUrl}
+                  onChange={(e) => setNewAnimationUrl(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  APNG on Sumon's VPS. App downloads + caches it.
+                </p>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -936,12 +977,15 @@ export default function HonorsPage() {
                   ...(newIcon.trim() && { icon: newIcon.trim() }),
                   ...(newDesc.trim() && { description: newDesc.trim() }),
                   ...(newRestricted && { restricted: true }),
+                  // 2026-10-13 (Sumon): frame animation URL (server-hosted APNG)
+                  ...(catalogTab === 'frame' && newAnimationUrl.trim() && { animationUrl: newAnimationUrl.trim() }),
                   createdAt: Date.now(),
                 });
                 // 2026-10-13 (Sumon): Refresh catalog list after add — items must stay visible permanently
                 queryClient.invalidateQueries({ queryKey: ['honors-catalog'] });
                 toast.success('Added to catalog');
                 setNewName(''); setNewIcon(''); setNewDesc(''); setNewRestricted(false);
+                setNewAnimationUrl('');
                 setShowAddForm(false);
               }}
               disabled={!newName.trim()}
