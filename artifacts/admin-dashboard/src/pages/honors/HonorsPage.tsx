@@ -695,7 +695,7 @@ export default function HonorsPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog — 2026-10-13 (Sumon): remove item from catalog */}
-      <Dialog open={!!deleteDialog} onOpenChange={(o) => !o && setDeleteDialog(null)}>
+      <Dialog key={deleteDialog?.id || 'none'} open={!!deleteDialog} onOpenChange={(o) => !o && setDeleteDialog(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove from Catalog</DialogTitle>
