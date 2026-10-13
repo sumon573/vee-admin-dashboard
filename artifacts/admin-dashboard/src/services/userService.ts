@@ -172,12 +172,11 @@ export async function addDiamonds(
   const newTotal = currentDiamonds + amount;
   // 2026-10-13: App reads from wallets/{uid}/balance (real-time) — write there.
   // Also keep users/{uid}/diamonds in sync (legacy field).
-  await update(ref(database, `users/${uid}`), {
-    diamonds: newTotal,
-  });
-  await update(ref(database, `wallets/${uid}`), {
-    balance: newTotal,
-  });
+  // Atomic multi-path update — দুটো একসাথে succeed/fail হবে (partial failure নয়)।
+  const updates: Record<string, number> = {};
+  updates[`users/${uid}/diamonds`] = newTotal;
+  updates[`wallets/${uid}/balance`] = newTotal;
+  await update(ref(database), updates);
 
   await logModerationAction({
     moderatorUid,
@@ -205,12 +204,11 @@ export async function removeDiamonds(
 
   // 2026-10-13: App reads from wallets/{uid}/balance (real-time) — write there.
   // Also keep users/{uid}/diamonds in sync (legacy field).
-  await update(ref(database, `users/${uid}`), {
-    diamonds: newTotal,
-  });
-  await update(ref(database, `wallets/${uid}`), {
-    balance: newTotal,
-  });
+  // Atomic multi-path update — দুটো একসাথে succeed/fail হবে (partial failure নয়)।
+  const updates: Record<string, number> = {};
+  updates[`users/${uid}/diamonds`] = newTotal;
+  updates[`wallets/${uid}/balance`] = newTotal;
+  await update(ref(database), updates);
 
   await logModerationAction({
     moderatorUid,
