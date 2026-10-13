@@ -137,6 +137,7 @@ async function grantHonor(uid: string, honorId: string, expiresAt?: number) {
     honorType: notifType,
     honorId,
     honorName: honor.name,
+    honorIcon: honor.icon || '',
     title: 'Congratulations!',
     body: notifType === 'frame' ? 'Got New Frame' : 'Got New Honor',
     timestamp: Date.now(),
