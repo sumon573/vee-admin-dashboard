@@ -286,6 +286,24 @@ export default function HonorsPage() {
     onError: () => toast.error('Failed to remove from catalog'),
   });
 
+  // 2026-10-13 (Sumon): Edit catalog item
+  const [editDialog, setEditDialog] = useState<Honor | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editIcon, setEditIcon] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editRestricted, setEditRestricted] = useState(false);
+  const [editUploading, setEditUploading] = useState(false);
+  const updateCatalogMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Honor> }) =>
+      set(ref(database, `honors_catalog/${id}`), { ...data, type: editDialog?.type }),
+    onSuccess: () => {
+      toast.success('Catalog updated');
+      queryClient.invalidateQueries({ queryKey: ['honors-catalog'] });
+      setEditDialog(null);
+    },
+    onError: () => toast.error('Failed to update catalog'),
+  });
+
   // 2026-10-13 (Sumon): Fetch user profile when UID selected
   const { data: userProfile } = useQuery({
     queryKey: ['honor-user-profile', selectedUid],
@@ -557,6 +575,21 @@ export default function HonorsPage() {
                       >
                         👥 View Holders
                       </Button>
+                      {/* 2026-10-13 (Sumon): Edit catalog item */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 w-full"
+                        onClick={() => {
+                          setEditDialog(honor);
+                          setEditName(honor.name);
+                          setEditIcon(honor.icon || '');
+                          setEditDesc(honor.description || '');
+                          setEditRestricted(!!honor.restricted);
+                        }}
+                      >
+                        ✏️ Edit
+                      </Button>
                       {/* 2026-10-13 (Sumon): Remove from catalog */}
                       <Button
                         variant="outline"
@@ -711,6 +744,96 @@ export default function HonorsPage() {
               disabled={deleteCatalogMutation.isPending}
             >
               {deleteCatalogMutation.isPending ? 'Removing...' : 'Remove'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Catalog Dialog — 2026-10-13 (Sumon): edit name, icon, description */}
+      <Dialog open={!!editDialog} onOpenChange={(o) => !o && setEditDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit {editDialog?.type === 'badge' ? 'Badge' : editDialog?.type === 'frame' ? 'Frame' : 'Nameplate'}</DialogTitle>
+            <DialogDescription>Update "{editDialog?.name}" in the catalog.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Name</label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Name" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Icon URL</label>
+              <div className="flex gap-2">
+                <Input value={editIcon} onChange={(e) => setEditIcon(e.target.value)} placeholder="https://..." className="flex-1" />
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file || !editDialog) return;
+                      setEditUploading(true);
+                      try {
+                        const fileName = `honors/${editDialog.type}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+                        const sRef = storageRef(storage, fileName);
+                        await uploadBytes(sRef, file);
+                        const url = await getDownloadURL(sRef);
+                        setEditIcon(url);
+                        toast.success('Image uploaded');
+                      } catch {
+                        toast.error('Upload failed');
+                      } finally {
+                        setEditUploading(false);
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" size="sm" disabled={editUploading} asChild>
+                    <span><Upload className="h-4 w-4 mr-1" /> {editUploading ? 'Uploading...' : 'Upload'}</span>
+                  </Button>
+                </label>
+              </div>
+              {editIcon && (
+                <img src={editIcon} alt="preview" className="mt-2 h-16 w-16 object-contain rounded border" />
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} placeholder="Description" />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="edit-restricted"
+                checked={editRestricted}
+                onChange={(e) => setEditRestricted(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <label htmlFor="edit-restricted" className="text-sm font-medium flex items-center gap-1">
+                <ShieldCheck className="h-4 w-4 text-purple-600" /> Special (super-admin only)
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialog(null)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (!editDialog || !editName.trim()) return;
+                updateCatalogMutation.mutate({
+                  id: editDialog.id,
+                  data: {
+                    id: editDialog.id,
+                    name: editName.trim(),
+                    ...(editIcon.trim() && { icon: editIcon.trim() }),
+                    ...(editDesc.trim() && { description: editDesc.trim() }),
+                    ...(editRestricted ? { restricted: true } : {}),
+                    createdAt: (editDialog as any).createdAt || Date.now(),
+                  },
+                });
+              }}
+              disabled={updateCatalogMutation.isPending || !editName.trim()}
+            >
+              {updateCatalogMutation.isPending ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
         </DialogContent>
