@@ -133,6 +133,7 @@ export default function HonorsPage() {
   const { isSuperAdmin } = usePermissions();
   const [searchUid, setSearchUid] = useState('');
   const [selectedUid, setSelectedUid] = useState('');
+  const [resolving, setResolving] = useState(false);
   const [grantDialog, setGrantDialog] = useState(false);
   const [selectedHonor, setSelectedHonor] = useState('');
   const [expiryValue, setExpiryValue] = useState('');
@@ -242,14 +243,39 @@ export default function HonorsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Enter user UID..."
+                placeholder="Enter user UID or vId (e.g. v7809825)..."
                 value={searchUid}
                 onChange={(e) => setSearchUid(e.target.value)}
                 className="pl-10"
               />
             </div>
-            <Button onClick={() => setSelectedUid(searchUid)} disabled={!searchUid}>
-              Load Honors
+            <Button
+              onClick={async () => {
+                const input = searchUid.trim();
+                if (!input) return;
+                // If input looks like a vId (v + digits), resolve to UID first
+                if (/^v\d+$/i.test(input)) {
+                  setResolving(true);
+                  try {
+                    const { getUidByVId } = await import('@/services/userService');
+                    const uid = await getUidByVId(input);
+                    if (uid) {
+                      setSelectedUid(uid);
+                    } else {
+                      toast.error(`No user found with vId ${input}`);
+                    }
+                  } catch {
+                    toast.error('Failed to resolve vId');
+                  } finally {
+                    setResolving(false);
+                  }
+                } else {
+                  setSelectedUid(input);
+                }
+              }}
+              disabled={!searchUid || resolving}
+            >
+              {resolving ? 'Resolving...' : 'Load Honors'}
             </Button>
           </div>
         </CardContent>
@@ -281,7 +307,7 @@ export default function HonorsPage() {
                         <div>
                           <div className="font-medium">{honor?.name || uh.honorId}</div>
                           <div className="text-xs text-muted-foreground">
-                            Granted {new Date(uh.grantedAt).toLocaleDateString()}
+                            Granted {new Date(uh.obtainedAt ?? uh.grantedAt ?? 0).toLocaleDateString()}
                             {uh.expiresAt && ` • Expires ${new Date(uh.expiresAt).toLocaleDateString()}`}
                           </div>
                         </div>

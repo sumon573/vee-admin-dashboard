@@ -70,6 +70,24 @@ export async function getUserById(uid: string): Promise<AppUser | null> {
   };
 }
 
+/**
+ * Resolve a vId (e.g. "v7809825") to the user's UID.
+ * Returns null if not found.
+ */
+export async function getUidByVId(vId: string): Promise<string | null> {
+  const database = requireRtdb();
+  const { query, orderByChild, equalTo } = await import('firebase/database');
+  const q = query(ref(database, 'users'), orderByChild('vId'), equalTo(vId.trim()));
+  const snapshot = await get(q);
+  if (!snapshot.exists()) return null;
+  // Return the first matching UID
+  let uid: string | null = null;
+  snapshot.forEach((child) => {
+    if (!uid) uid = child.key;
+  });
+  return uid;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin write operations
 // ─────────────────────────────────────────────────────────────────────────────
