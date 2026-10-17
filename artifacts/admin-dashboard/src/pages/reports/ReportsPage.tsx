@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { Flag, Search, User, FileText } from 'lucide-react';
-import { useReports, useResolveReport, useDismissReport } from '@/hooks';
+import { useReports, useResolveReport, useDismissReport, useBanUserFromVoice } from '@/hooks';
 import type { ReportStatus, Report } from '@/types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,8 @@ export default function ReportsPage() {
 
   const resolveMutation = useResolveReport();
   const dismissMutation = useDismissReport();
+  // 2026-10-17 (Sumon): quick voice-ban from a report — 24h, report's reason.
+  const voiceBanMutation = useBanUserFromVoice();
 
   const [actionDialog, setActionDialog] = useState<{ report: Report, action: 'resolve'|'dismiss', note: string } | null>(null);
 
@@ -146,6 +148,24 @@ export default function ReportsPage() {
               {status === 'pending' && (
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-orange-500/30 text-orange-500 hover:bg-orange-500/10"
+                      title="Ban this user from voice rooms for 24 hours"
+                      onClick={() => {
+                        if (!window.confirm(`Ban ${report.reportedUid} from voice rooms for 24 hours?`)) return;
+                        voiceBanMutation.mutate({
+                          uid: report.reportedUid,
+                          targetName: report.reportedUid,
+                          reason: report.reason || 'inappropriate',
+                          duration: { kind: 'temporary', ms: 24 * 3600_000 },
+                        });
+                        resolveMutation.mutate({ reportId: report.id, note: 'Voice-banned 24h by admin' });
+                      }}
+                    >
+                      Voice Ban 24h
+                    </Button>
                     <Button 
                       variant="outline" 
                       size="sm"
