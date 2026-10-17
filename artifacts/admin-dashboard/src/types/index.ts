@@ -25,6 +25,14 @@ export interface AppUser {
   wallet: number;
   online: boolean;
   banned: boolean;
+  /** Voice-room ban (2026-10-17): user can still log in, but cannot enter voice rooms. */
+  voiceBan?: {
+    banned: boolean;
+    reason: string;
+    bannedAt: number;
+    bannedUntil: number | null;
+    bannedBy?: string;
+  };
   createdAt: number;
   /** Friend UIDs keyed to true */
   friends?: Record<string, true>;
