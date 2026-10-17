@@ -20,6 +20,8 @@ export {
   useUsers,
   useBanUser,
   useUnbanUser,
+  useBanUserFromVoice,
+  useUnbanUserFromVoice,
   useChangeRole,
   useAddDiamonds,
   useRemoveDiamonds,

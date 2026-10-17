@@ -8,10 +8,13 @@ import { useAppAuth } from '@/contexts/AuthContext';
 import {
   addDiamonds,
   banUser,
+  banUserFromVoice,
   changeUserRole,
   getAllUsers,
   removeDiamonds,
   unbanUser,
+  unbanUserFromVoice,
+  type VoiceBanDuration,
 } from '@/services/userService';
 import type {
   AppUser,
@@ -160,6 +163,34 @@ export function useUnbanUser() {
     },
     onSuccess: () => { invalidateUsers(); toast.success('User unbanned'); },
     onError: () => toast.error('Failed to unban user'),
+  });
+}
+
+// ─── Voice-room ban hooks (2026-10-17, Sumon) ─────────────────────────────
+
+export function useBanUserFromVoice() {
+  const { appUser } = useAppAuth();
+  return useMutation({
+    mutationFn: ({ uid, targetName, reason, duration }: {
+      uid: string; targetName: string; reason: string; duration: VoiceBanDuration;
+    }) => {
+      if (!appUser) throw new Error('Not authenticated');
+      return banUserFromVoice(uid, appUser.uid, appUser.name, targetName, reason, duration);
+    },
+    onSuccess: () => { invalidateUsers(); toast.success('User banned from voice rooms'); },
+    onError: () => toast.error('Failed to ban user from voice rooms'),
+  });
+}
+
+export function useUnbanUserFromVoice() {
+  const { appUser } = useAppAuth();
+  return useMutation({
+    mutationFn: ({ uid, targetName }: { uid: string; targetName: string }) => {
+      if (!appUser) throw new Error('Not authenticated');
+      return unbanUserFromVoice(uid, appUser.uid, appUser.name, targetName);
+    },
+    onSuccess: () => { invalidateUsers(); toast.success('Voice-room ban lifted'); },
+    onError: () => toast.error('Failed to lift voice-room ban'),
   });
 }
 
