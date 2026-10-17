@@ -1,4 +1,4 @@
-import { get, ref, update } from 'firebase/database';
+import { get, ref, remove, update } from 'firebase/database';
 
 import { rtdb } from '@/config/firebase';
 import type { AppUser } from '@/types';
@@ -133,6 +133,72 @@ export async function unbanUser(
     targetUid: uid,
     targetName,
     details: 'User unbanned by admin',
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Voice-room ban (2026-10-17, Sumon): bans ONLY voice-room access — the user
+// can still log in and use the rest of the app. Controlled from this panel.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type VoiceBanDuration =
+  | { kind: 'temporary'; ms: number }
+  | { kind: 'permanent' };
+
+export async function banUserFromVoice(
+  uid: string,
+  moderatorUid: string,
+  moderatorName: string,
+  targetName: string,
+  reason: string,
+  duration: VoiceBanDuration,
+): Promise<void> {
+  const database = requireRtdb();
+  const now = Date.now();
+  const bannedUntil = duration.kind === 'permanent' ? null : now + duration.ms;
+
+  const banRecord = {
+    banned: true,
+    reason,
+    bannedAt: now,
+    bannedUntil,
+    bannedBy: moderatorName,
+  };
+
+  await update(ref(database, `users/${uid}`), { voiceBan: banRecord });
+
+  // History (never deleted — shows escalation for repeat offenders).
+  await update(ref(database, `users/${uid}/banHistory`), {
+    [`voice_${now}`]: { ...banRecord, type: 'voice' },
+  });
+
+  await logModerationAction({
+    moderatorUid,
+    moderatorName,
+    action: 'voice-ban',
+    targetUid: uid,
+    targetName,
+    details: `Voice-room banned (${reason}, ${duration.kind === 'permanent' ? 'permanent' : `until ${new Date(bannedUntil as number).toLocaleString()}`})`,
+  });
+}
+
+export async function unbanUserFromVoice(
+  uid: string,
+  moderatorUid: string,
+  moderatorName: string,
+  targetName: string,
+): Promise<void> {
+  const database = requireRtdb();
+
+  await remove(ref(database, `users/${uid}/voiceBan`));
+
+  await logModerationAction({
+    moderatorUid,
+    moderatorName,
+    action: 'voice-unban',
+    targetUid: uid,
+    targetName,
+    details: 'Voice-room ban lifted by admin',
   });
 }
 
