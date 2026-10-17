@@ -172,6 +172,22 @@ export async function banUserFromVoice(
     [`voice_${now}`]: { ...banRecord, type: 'voice' },
   });
 
+  // 2026-10-17 (Sumon): auto-send a warning notice from Vee Team.
+  try {
+    const { sendSystemNotice } = await import('./veeTeamService');
+    const untilText = bannedUntil
+      ? ` until ${new Date(bannedUntil).toLocaleString()}`
+      : ' permanently';
+    await sendSystemNotice(
+      [uid],
+      `⚠️ Voice Room Restriction\n\nYour access to voice rooms has been restricted${untilText}.\n\nReason: ${reason}\n\nPlease follow the community rules. Repeated violations lead to longer restrictions.`,
+      moderatorUid,
+      moderatorName,
+    );
+  } catch {
+    // Non-critical — the ban itself succeeded; the notice is best-effort.
+  }
+
   await logModerationAction({
     moderatorUid,
     moderatorName,
