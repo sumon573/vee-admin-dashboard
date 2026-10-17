@@ -10,7 +10,7 @@ import {
   Gem,
   DollarSign
 } from 'lucide-react';
-import { useUsers, useBanUser, useUnbanUser, useChangeRole, useAddDiamonds, useRemoveDiamonds } from '@/hooks';
+import { useUsers, useBanUser, useUnbanUser, useBanUserFromVoice, useUnbanUserFromVoice, useChangeRole, useAddDiamonds, useRemoveDiamonds } from '@/hooks';
 import type { UserFilter, UserSort, AppUser } from '@/types';
 import { getInitials, formatNumber } from '@/utils';
 import { RoleBadge } from '@/components/users/RoleBadge';
@@ -94,11 +94,17 @@ export default function UsersPage() {
   // Actions state
   const [copiedUid, setCopiedUid] = useState<string | null>(null);
   const [banDialog, setBanDialog] = useState<{ user: AppUser, action: 'ban' | 'unban' } | null>(null);
+  // 2026-10-17 (Sumon): voice-room ban dialog — reason + duration.
+  const [voiceBanDialog, setVoiceBanDialog] = useState<{ user: AppUser, action: 'ban' | 'unban' } | null>(null);
+  const [voiceBanReason, setVoiceBanReason] = useState('harassment');
+  const [voiceBanDuration, setVoiceBanDuration] = useState('24h');
   const [roleDialog, setRoleDialog] = useState<{ user: AppUser, newRole: string } | null>(null);
   const [diamondDialog, setDiamondDialog] = useState<{ user: AppUser, action: 'add' | 'remove', amount: string } | null>(null);
 
   const banMutation = useBanUser();
   const unbanMutation = useUnbanUser();
+  const voiceBanMutation = useBanUserFromVoice();
+  const voiceUnbanMutation = useUnbanUserFromVoice();
   const roleMutation = useChangeRole();
   const addDiamondsMutation = useAddDiamonds();
   const removeDiamondsMutation = useRemoveDiamonds();
@@ -119,6 +125,29 @@ export default function UsersPage() {
     }
     setBanDialog(null);
   };
+
+  // 2026-10-17 (Sumon): execute voice-room ban/unban with reason + duration.
+  const executeVoiceBanAction = () => {
+    if (!voiceBanDialog) return;
+    const { user, action } = voiceBanDialog;
+    if (action === 'ban') {
+      const duration = voiceBanDuration === 'permanent'
+        ? { kind: 'permanent' as const }
+        : { kind: 'temporary' as const, ms: parseDurationMs(voiceBanDuration) };
+      voiceBanMutation.mutate({ uid: user.uid, targetName: user.name, reason: voiceBanReason, duration });
+    } else {
+      voiceUnbanMutation.mutate({ uid: user.uid, targetName: user.name });
+    }
+    setVoiceBanDialog(null);
+  };
+
+  /** Parse '24h' | '7d' | '30d' into milliseconds. */
+  function parseDurationMs(d: string): number {
+    const n = parseInt(d, 10);
+    if (d.endsWith('h')) return n * 3600_000;
+    if (d.endsWith('d')) return n * 86_400_000;
+    return 86_400_000;
+  }
 
   const executeRoleAction = () => {
     if (!roleDialog) return;
@@ -269,6 +298,9 @@ export default function UsersPage() {
                         ) : (
                           <OnlineIndicator online={user.online} />
                         )}
+                        {user.voiceBan?.banned && (
+                          <Badge variant="outline" className="h-5 border-orange-500 text-orange-500">Voice Banned</Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -330,6 +362,22 @@ export default function UsersPage() {
                               className="text-destructive cursor-pointer focus:text-destructive"
                             >
                               Ban User
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          {user.voiceBan?.banned ? (
+                            <DropdownMenuItem
+                              onClick={() => setVoiceBanDialog({ user, action: 'unban' })}
+                              className="text-green-500 cursor-pointer focus:text-green-500"
+                            >
+                              Unban from Voice Rooms
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => { setVoiceBanReason('harassment'); setVoiceBanDuration('24h'); setVoiceBanDialog({ user, action: 'ban' }); }}
+                              className="text-orange-500 cursor-pointer focus:text-orange-500"
+                            >
+                              Ban from Voice Rooms
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -420,6 +468,65 @@ export default function UsersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 2026-10-17 (Sumon): Voice-room ban dialog — reason + duration. */}
+      <Dialog open={!!voiceBanDialog} onOpenChange={(o) => !o && setVoiceBanDialog(null)}>
+        <DialogContent className="bg-card border-border sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {voiceBanDialog?.action === 'ban' ? 'Ban from Voice Rooms' : 'Unban from Voice Rooms'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              {voiceBanDialog?.action === 'ban' ? (
+                <><span className="font-medium text-foreground">{voiceBanDialog?.user.name}</span> will be blocked from entering voice rooms. They can still log in and use the rest of the app.</>
+              ) : (
+                <><span className="font-medium text-foreground">{voiceBanDialog?.user.name}</span> will be allowed back into voice rooms.</>
+              )}
+            </p>
+            {voiceBanDialog?.action === 'ban' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Reason</label>
+                  <Select value={voiceBanReason} onValueChange={setVoiceBanReason}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="harassment">Harassment</SelectItem>
+                      <SelectItem value="hate_speech">Hate speech</SelectItem>
+                      <SelectItem value="spam">Spam</SelectItem>
+                      <SelectItem value="inappropriate">Inappropriate content</SelectItem>
+                      <SelectItem value="violence">Violence / threats</SelectItem>
+                      <SelectItem value="other">Other violation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Duration</label>
+                  <Select value={voiceBanDuration} onValueChange={setVoiceBanDuration}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="24h">24 hours (1st offense)</SelectItem>
+                      <SelectItem value="7d">7 days (2nd offense)</SelectItem>
+                      <SelectItem value="30d">30 days (3rd offense)</SelectItem>
+                      <SelectItem value="permanent">Permanent (severe / repeat)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setVoiceBanDialog(null)}>Cancel</Button>
+            <Button
+              className={voiceBanDialog?.action === 'ban' ? 'bg-orange-600 hover:bg-orange-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}
+              onClick={executeVoiceBanAction}
+            >
+              {voiceBanDialog?.action === 'ban' ? 'Ban from Voice' : 'Lift Voice Ban'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!roleDialog} onOpenChange={(o) => !o && setRoleDialog(null)}>
         <DialogContent className="bg-card border-border sm:max-w-sm">
