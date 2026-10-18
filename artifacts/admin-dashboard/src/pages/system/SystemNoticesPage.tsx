@@ -1,11 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Megaphone, Send, CheckCircle2, AlertTriangle, Search, X } from 'lucide-react';
+import { Megaphone, Send, CheckCircle2, AlertTriangle, Search, X, ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAppAuth } from '@/contexts/AuthContext';
 import { getVeeTeamStatus, initializeVeeTeam, sendSystemNotice } from '@/services/veeTeamService';
 import { getAllUsers } from '@/services/userService';
+import { auth } from '@/config/firebase';
 import type { AppUser } from '@/types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +30,11 @@ export default function SystemNoticesPage() {
   // 2026-10-17 (Sumon): Specific users — searchable picker with DP + name + V ID.
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<AppUser[]>([]);
+  // 2026-10-18 (Sumon): banner image for official notices — uploaded to
+  // Telegram storage, shown in push notification + Vee Team chat.
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: initialized, isLoading: statusLoading } = useQuery({
     queryKey: ['vee-team-status'],
@@ -89,13 +95,33 @@ export default function SystemNoticesPage() {
         targets = selectedUsers.map((u) => u.uid);
       }
       if (targets.length === 0) throw new Error('No recipients selected');
-      return sendSystemNotice(targets, text, appUser.uid, appUser.name);
+      // 2026-10-18 (Sumon): upload banner to Telegram storage first.
+      let bannerUrl: string | undefined;
+      if (bannerFile) {
+        const idToken = await auth?.currentUser?.getIdToken();
+        if (!idToken) throw new Error('Not authenticated — cannot upload banner');
+        const form = new FormData();
+        form.append('file', bannerFile, bannerFile.name || 'banner.jpg');
+        form.append('type', 'chat');
+        const resp = await fetch('https://vee-club.duckdns.org/api/media/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${idToken}` },
+          body: form,
+        });
+        if (!resp.ok) throw new Error('Banner upload failed');
+        const data = await resp.json();
+        bannerUrl = data.url;
+        if (!bannerUrl) throw new Error('Banner upload returned no URL');
+      }
+      return sendSystemNotice(targets, text, appUser.uid, appUser.name, bannerUrl);
     },
     onSuccess: (res) => {
       toast.success(`Notice sent to ${res.sent} users${res.failed ? ` (${res.failed} failed)` : ''}`);
       setMessage('');
       setSelectedUsers([]);
       setSearchQuery('');
+      setBannerFile(null);
+      setBannerPreview(null);
     },
     onError: (e: any) => toast.error(e?.message || 'Failed to send notice'),
   });
@@ -152,6 +178,46 @@ export default function SystemNoticesPage() {
           rows={4}
           maxLength={2000}
         />
+        {/* 2026-10-18 (Sumon): banner image — shown in push notification + chat */}
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) {
+                setBannerFile(f);
+                setBannerPreview(URL.createObjectURL(f));
+              }
+            }}
+          />
+          {bannerPreview ? (
+            <div className="relative inline-block">
+              <img src={bannerPreview} alt="Banner preview" className="max-h-40 rounded-lg border" />
+              <button
+                type="button"
+                onClick={() => { setBannerFile(null); setBannerPreview(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                title="Remove banner"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <p className="text-xs text-muted-foreground mt-1">Banner — will show in notification + chat</p>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="gap-2"
+            >
+              <ImagePlus className="w-4 h-4" />
+              Add Banner Image (optional)
+            </Button>
+          )}
+        </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <Select value={target} onValueChange={(v) => setTarget(v as 'all' | 'users')}>
             <SelectTrigger className="sm:w-48"><SelectValue /></SelectTrigger>

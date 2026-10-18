@@ -75,6 +75,7 @@ export async function sendSystemNotice(
   content: string,
   moderatorUid: string,
   moderatorName: string,
+  imageUrl?: string,
 ): Promise<{ sent: number; failed: number }> {
   const database = requireRtdb();
   let sent = 0;
@@ -122,6 +123,25 @@ export async function sendSystemNotice(
       }
 
       // The notice itself, from Vee Team.
+      // 2026-10-18 (Sumon): banner support — if imageUrl provided, send the
+      // banner as an image message first, then the text.
+      if (imageUrl) {
+        const imgMsgRef = push(ref(database, `chats/${chatId}/messages`));
+        await set(imgMsgRef, {
+          chatId,
+          senderId: VEE_TEAM_UID,
+          senderName: VEE_TEAM_NAME,
+          type: 'image',
+          content: imageUrl,
+          createdAt: now,
+          status: 'sent',
+          reactions: {},
+          isSystemNotice: true,
+          bannerNotice: true,
+          deletedForMe: false,
+          deletedForEveryone: false,
+        });
+      }
       const newMsgRef = push(ref(database, `chats/${chatId}/messages`));
       await set(newMsgRef, {
         chatId,
@@ -129,10 +149,11 @@ export async function sendSystemNotice(
         senderName: VEE_TEAM_NAME,
         type: 'text',
         content,
-        createdAt: now,
+        createdAt: now + (imageUrl ? 1 : 0),
         status: 'sent',
         reactions: {},
         isSystemNotice: true,
+        bannerImage: imageUrl || null,
         deletedForMe: false,
         deletedForEveryone: false,
       });
@@ -141,7 +162,7 @@ export async function sendSystemNotice(
       const meta = {
         id: chatId,
         lastMessage: content.length > 80 ? content.slice(0, 80) + '…' : content,
-        lastMessageType: 'text',
+        lastMessageType: imageUrl ? 'image' : 'text',
         lastMessageTime: now,
         isHidden: false,
       };
@@ -164,7 +185,7 @@ export async function sendSystemNotice(
     action: 'system-notice',
     targetUid: `${sent} users`,
     targetName: `${sent} users`,
-    details: `System notice sent to ${sent} users (${failed} failed): ${content.slice(0, 100)}`,
+    details: `System notice sent to ${sent} users (${failed} failed)${imageUrl ? ' [with banner]' : ''}: ${content.slice(0, 100)}`,
   });
 
   return { sent, failed };
