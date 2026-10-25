@@ -33,11 +33,11 @@ interface Honor {
   createdAt?: number;
 }
 
-/** 2026-10-25 (Sumon): Assistant honors — each attached to ONE specific Official,
- * granted by the boss only (restricted). The grant dialog collects the Official
- * + the admin-written display text ("Assistant of X") shown in the app's badge
- * detail popup. Detected by catalog id: the Edit Catalog save drops unknown
- * fields, so a catalog flag would not survive edits. */
+** 2026-10-25 (Sumon): Assistant honors — granted by the boss only (restricted).
+ * The grant dialog collects only the admin-written display text ("Assistant of X")
+ * shown in the app's badge detail popup — no Official UID field (removed 2026-10-26
+ * per Sumon: the UID option is not needed). Detected by catalog id: the Edit Catalog
+ * save drops unknown fields, so a catalog flag would not survive edits. */
 const ASSISTANT_HONOR_IDS = ['vee-assistant', 'vee-assistant-frame'];
 function isAssistantHonor(id: string): boolean {
   return ASSISTANT_HONOR_IDS.includes(id);
@@ -123,7 +123,7 @@ async function grantHonor(
   uid: string,
   honorId: string,
   expiresAt?: number,
-  assistant?: { officialUid: string; officialName: string; displayText: string },
+  assistant?: { displayText: string },
 ) {
   // 2026-10-13: Write to the app's expected paths (users/{uid}/badges|frames|nameplates)
   // with the GrantedBadge/GrantedFrame format. Official manual grants use source: 'official'.
@@ -149,10 +149,6 @@ async function grantHonor(
     validity: expiresAt ? expiresAt : 'permanent',
     source: 'official',
     grantedBy: 'admin',
-    ...(assistant && {
-      assistantOfUid: assistant.officialUid,
-      assistantOfName: assistant.officialName,
-    }),
   });
   
   // Audit log
@@ -160,7 +156,6 @@ async function grantHonor(
     action: 'grant_honor',
     targetUid: uid,
     honorId,
-    ...(assistant && { assistantOfUid: assistant.officialUid }),
     timestamp: Date.now(),
   });
 
@@ -238,12 +233,10 @@ export default function HonorsPage() {
   const [resolving, setResolving] = useState(false);
   const [grantDialog, setGrantDialog] = useState(false);
   const [selectedHonor, setSelectedHonor] = useState('');
-  // 2026-10-25 (Sumon): Assistant grant fields — the Official they assist
-  // + the admin-written display text shown in the app's badge detail popup.
-  const [assistantOfficialUid, setAssistantOfficialUid] = useState('');
-  const [assistantOfficialName, setAssistantOfficialName] = useState('');
+  // 2026-10-25 (Sumon): Assistant grant field — the admin-written display text
+  // shown in the app's badge detail popup. (No Official UID field — removed
+  // 2026-10-26 per Sumon: the UID option is not needed.)
   const [assistantDisplayText, setAssistantDisplayText] = useState('');
-  const [resolvingOfficial, setResolvingOfficial] = useState(false);
   const [expiryValue, setExpiryValue] = useState('');
   const [expiryUnit, setExpiryUnit] = useState<'hours' | 'days' | 'months' | 'years' | 'permanent'>('permanent');
   // 2026-10-13 (Sumon): Edit validity dialog state
@@ -284,14 +277,12 @@ export default function HonorsPage() {
   const grantMutation = useMutation({
     mutationFn: ({ uid, honorId, expiresAt, assistant }: {
       uid: string; honorId: string; expiresAt?: number;
-      assistant?: { officialUid: string; officialName: string; displayText: string };
+      assistant?: { displayText: string };
     }) => grantHonor(uid, honorId, expiresAt, assistant),
     onSuccess: () => {
       toast.success('Honor granted successfully');
       queryClient.invalidateQueries({ queryKey: ['user-honors', selectedUid] });
       setGrantDialog(false);
-      setAssistantOfficialUid('');
-      setAssistantOfficialName('');
       setAssistantDisplayText('');
     },
     onError: () => toast.error('Failed to grant honor'),
@@ -388,10 +379,10 @@ export default function HonorsPage() {
         : v * 365 * 24 * 60 * 60 * 1000;
       expiresAt = Date.now() + ms;
     }
-    // 2026-10-25 (Sumon): Assistant honors — require the Official + display text.
+    // 2026-10-25 (Sumon): Assistant honors — require the display text.
     const isAssistant = isAssistantHonor(selectedHonor);
-    if (isAssistant && (!assistantOfficialUid.trim() || !assistantOfficialName || !assistantDisplayText.trim())) {
-      toast.error('Assistant honors need the Official they assist and the display text.');
+    if (isAssistant && !assistantDisplayText.trim()) {
+      toast.error('Assistant honors need the display text.');
       return;
     }
     grantMutation.mutate({
@@ -400,8 +391,6 @@ export default function HonorsPage() {
       expiresAt,
       ...(isAssistant && {
         assistant: {
-          officialUid: assistantOfficialUid.trim(),
-          officialName: assistantOfficialName,
           displayText: assistantDisplayText.trim(),
         },
       }),
@@ -695,10 +684,8 @@ export default function HonorsPage() {
               <label className="text-sm font-medium">Select Honor</label>
               <Select value={selectedHonor} onValueChange={(v) => {
                 setSelectedHonor(v);
-                // Switching away from an Assistant honor clears its extra fields.
+                // Switching away from an Assistant honor clears its extra field.
                 if (!isAssistantHonor(v)) {
-                  setAssistantOfficialUid('');
-                  setAssistantOfficialName('');
                   setAssistantDisplayText('');
                 }
               }}>
@@ -714,45 +701,6 @@ export default function HonorsPage() {
             </div>
             {isAssistantHonor(selectedHonor) && (
               <>
-                <div>
-                  <label className="text-sm font-medium">Official they assist (UID)</label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Official's user UID"
-                      value={assistantOfficialUid}
-                      onChange={(e) => setAssistantOfficialUid(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button
-                      variant="outline"
-                      disabled={!assistantOfficialUid.trim() || resolvingOfficial}
-                      onClick={async () => {
-                        const input = assistantOfficialUid.trim();
-                        if (!input) return;
-                        setResolvingOfficial(true);
-                        try {
-                          const { getUserById } = await import('@/services/userService');
-                          const profile = await getUserById(input);
-                          if (profile?.name) {
-                            setAssistantOfficialName(profile.name);
-                            setAssistantDisplayText(`Assistant of ${profile.name}`);
-                          } else {
-                            toast.error('No user found with that UID');
-                          }
-                        } catch {
-                          toast.error('Failed to resolve Official');
-                        } finally {
-                          setResolvingOfficial(false);
-                        }
-                      }}
-                    >
-                      {resolvingOfficial ? 'Resolving...' : 'Resolve'}
-                    </Button>
-                  </div>
-                  {assistantOfficialName && (
-                    <p className="text-sm text-muted-foreground mt-1">Official: {assistantOfficialName}</p>
-                  )}
-                </div>
                 <div>
                   <label className="text-sm font-medium">Display text (shown in the badge detail popup)</label>
                   <Input
@@ -795,8 +743,7 @@ export default function HonorsPage() {
             <Button
               onClick={handleGrant}
               disabled={!selectedHonor || grantMutation.isPending
-                || (isAssistantHonor(selectedHonor)
-                  && (!assistantOfficialUid.trim() || !assistantOfficialName || !assistantDisplayText.trim()))}
+                || (isAssistantHonor(selectedHonor) && !assistantDisplayText.trim())}
             >
               {grantMutation.isPending ? 'Granting...' : 'Grant'}
             </Button>
