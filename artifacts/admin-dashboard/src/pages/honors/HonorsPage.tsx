@@ -33,7 +33,7 @@ interface Honor {
   createdAt?: number;
 }
 
-** 2026-10-25 (Sumon): Assistant honors — granted by the boss only (restricted).
+/** 2026-10-25 (Sumon): Assistant honors — granted by the boss only (restricted).
  * The grant dialog collects only the admin-written display text ("Assistant of X")
  * shown in the app's badge detail popup — no Official UID field (removed 2026-10-26
  * per Sumon: the UID option is not needed). Detected by catalog id: the Edit Catalog
