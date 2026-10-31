@@ -1,6 +1,7 @@
 import { get, ref, remove, update } from 'firebase/database';
 
-import { rtdb } from '@/config/firebase';
+import { auth, rtdb } from '@/config/firebase';
+import { getIdToken } from 'firebase/auth';
 import type { AppUser } from '@/types';
 
 import { logModerationAction } from './moderationService';
@@ -241,24 +242,42 @@ export async function changeUserRole(
   });
 }
 
+const WALLET_ADMIN_URL = 'https://vee-club.duckdns.org/wallet/admin/adjust';
+
+// 2026-10-31: panel diamond edits go through the wallet service (Postgres +
+// mirror). Firebase-direct writes diverged the display balance from Postgres
+// and stalled the mirror on every edit. Delta-based: the server
+// balance-checks, journals, mirrors, and syncs the legacy display field.
+async function adjustDiamondsViaServer(
+  uid: string,
+  delta: number,
+  moderatorUid: string,
+  reason: string,
+): Promise<number> {
+  if (!auth?.currentUser) throw new Error('Not authenticated');
+  const idToken = await getIdToken(auth.currentUser);
+  const key = `admin-adjust-${moderatorUid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const res = await fetch(WALLET_ADMIN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ uid, delta, idempotencyKey: key, reason }),
+  });
+  const out = (await res.json().catch(() => ({}))) as { ok?: boolean; balance?: number; code?: string };
+  if (!out || out.ok !== true || typeof out.balance !== 'number') {
+    throw new Error(out?.code || 'adjust failed');
+  }
+  return out.balance;
+}
+
 export async function addDiamonds(
   uid: string,
   amount: number,
-  currentDiamonds: number,
+  _currentDiamonds: number,
   moderatorUid: string,
   moderatorName: string,
   targetName: string,
 ): Promise<void> {
-  const database = requireRtdb();
-
-  const newTotal = currentDiamonds + amount;
-  // 2026-10-13: App reads from wallets/{uid}/balance (real-time) — write there.
-  // Also keep users/{uid}/diamonds in sync (legacy field).
-  // Atomic multi-path update — দুটো একসাথে succeed/fail হবে (partial failure নয়)।
-  const updates: Record<string, number> = {};
-  updates[`users/${uid}/diamonds`] = newTotal;
-  updates[`wallets/${uid}/balance`] = newTotal;
-  await update(ref(database), updates);
+  const newBalance = await adjustDiamondsViaServer(uid, amount, moderatorUid, 'add_diamonds');
 
   await logModerationAction({
     moderatorUid,
@@ -266,31 +285,19 @@ export async function addDiamonds(
     action: 'add_diamonds',
     targetUid: uid,
     targetName,
-    details: `Added ${amount} diamonds (total: ${newTotal})`,
+    details: `Added ${amount} diamonds (total: ${newBalance})`,
   });
 }
 
 export async function removeDiamonds(
   uid: string,
   amount: number,
-  currentDiamonds: number,
+  _currentDiamonds: number,
   moderatorUid: string,
   moderatorName: string,
   targetName: string,
 ): Promise<void> {
-  const database = requireRtdb();
-
-  const snapshot = await get(ref(database, `users/${uid}/diamonds`));
-  const current = Number(snapshot.val() ?? 0);
-  const newTotal = Math.max(0, current - amount);
-
-  // 2026-10-13: App reads from wallets/{uid}/balance (real-time) — write there.
-  // Also keep users/{uid}/diamonds in sync (legacy field).
-  // Atomic multi-path update — দুটো একসাথে succeed/fail হবে (partial failure নয়)।
-  const updates: Record<string, number> = {};
-  updates[`users/${uid}/diamonds`] = newTotal;
-  updates[`wallets/${uid}/balance`] = newTotal;
-  await update(ref(database), updates);
+  const newBalance = await adjustDiamondsViaServer(uid, -amount, moderatorUid, 'remove_diamonds');
 
   await logModerationAction({
     moderatorUid,
@@ -298,6 +305,6 @@ export async function removeDiamonds(
     action: 'remove_diamonds',
     targetUid: uid,
     targetName,
-    details: `Removed ${amount} diamonds (total: ${newTotal})`,
+    details: `Removed ${amount} diamonds (total: ${newBalance})`,
   });
 }

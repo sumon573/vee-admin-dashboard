@@ -350,6 +350,7 @@ export default function UserProfilePage() {
             <Button variant="outline" onClick={() => setDiamondDialog({ open: false, action: 'add', amount: '' })}>Cancel</Button>
             <Button 
               onClick={handleDiamondChange}
+              disabled={addDiamondsMutation.isPending || removeDiamondsMutation.isPending}
               variant={diamondDialog.action === 'add' ? 'default' : 'destructive'}
             >
               {diamondDialog.action === 'add' ? 'Add Diamonds' : 'Remove Diamonds'}

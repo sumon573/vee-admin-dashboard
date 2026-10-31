@@ -583,6 +583,7 @@ export default function UsersPage() {
             <Button variant="outline" onClick={() => setDiamondDialog(null)}>Cancel</Button>
             <Button 
               onClick={executeDiamondAction}
+              disabled={addDiamondsMutation.isPending || removeDiamondsMutation.isPending}
               variant={diamondDialog?.action === 'add' ? 'default' : 'destructive'}
             >
               {diamondDialog?.action === 'add' ? 'Add Diamonds' : 'Remove Diamonds'}
