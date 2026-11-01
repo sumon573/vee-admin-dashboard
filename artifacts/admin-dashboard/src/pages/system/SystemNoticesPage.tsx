@@ -110,6 +110,8 @@ export default function SystemNoticesPage() {
         const form = new FormData();
         form.append('file', bannerFile, bannerFile.name || 'banner.jpg');
         form.append('type', 'chat');
+        // 2026-11-01 (batch61): notification banners keep the FULL-RESOLUTION ORIGINAL (Telegram level) — media server stores original=1 uploads as documents, never re-encoded.
+        form.append('original', '1');
         const resp = await fetch('https://vee-club.duckdns.org/api/media/upload', {
           method: 'POST',
           headers: { Authorization: `Bearer ${idToken}` },
