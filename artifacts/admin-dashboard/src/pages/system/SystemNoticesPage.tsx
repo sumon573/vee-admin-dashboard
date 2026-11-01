@@ -95,10 +95,17 @@ export default function SystemNoticesPage() {
         targets = selectedUsers.map((u) => u.uid);
       }
       if (targets.length === 0) throw new Error('No recipients selected');
+      // 2026-11-01 (batch57): one ID token for banner upload AND the rich
+      // push (best-effort — a missing token only skips push, never the notice).
+      let idToken: string | undefined;
+      try {
+        idToken = await auth?.currentUser?.getIdToken();
+      } catch {
+        idToken = undefined;
+      }
       // 2026-10-18 (Sumon): upload banner to Telegram storage first.
       let bannerUrl: string | undefined;
       if (bannerFile) {
-        const idToken = await auth?.currentUser?.getIdToken();
         if (!idToken) throw new Error('Not authenticated — cannot upload banner');
         const form = new FormData();
         form.append('file', bannerFile, bannerFile.name || 'banner.jpg');
@@ -113,10 +120,10 @@ export default function SystemNoticesPage() {
         bannerUrl = data.url;
         if (!bannerUrl) throw new Error('Banner upload returned no URL');
       }
-      return sendSystemNotice(targets, text, appUser.uid, appUser.name, bannerUrl);
+      return sendSystemNotice(targets, text, appUser.uid, appUser.name, bannerUrl, { idToken });
     },
     onSuccess: (res) => {
-      toast.success(`Notice sent to ${res.sent} users${res.failed ? ` (${res.failed} failed)` : ''}`);
+      toast.success(`Notice sent to ${res.sent} users${res.failed ? ` (${res.failed} failed)` : ''}${res.pushFailed ? ` (push failed for ${res.pushFailed})` : ''}`);
       setMessage('');
       setSelectedUsers([]);
       setSearchQuery('');

@@ -8,6 +8,9 @@
  * @example formatNumber(1234567) → "1,234,567"
  */
 export function formatNumber(value: number): string {
+  // 2026-10-31: a non-number (e.g. a legacy wallet object) used to render as
+  // "NaN" in the users table. Guard here so no bad record can ever show NaN.
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '0';
   return new Intl.NumberFormat('en-US').format(value);
 }
 

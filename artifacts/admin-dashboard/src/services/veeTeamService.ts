@@ -76,10 +76,18 @@ export async function sendSystemNotice(
   moderatorUid: string,
   moderatorName: string,
   imageUrl?: string,
-): Promise<{ sent: number; failed: number }> {
+  // 2026-11-01 (batch57): when the caller's Firebase ID token is passed,
+  // each recipient ALSO gets a rich push via VPS /api/notifications/send
+  // (title 'Vee Team', body = notice text, banner image when present).
+  // Push is best-effort and never fails the notice itself. Callers that
+  // omit opts keep today's DM-only behavior (e.g. ban warnings).
+  opts?: { idToken?: string },
+): Promise<{ sent: number; failed: number; pushSent: number; pushFailed: number }> {
   const database = requireRtdb();
   let sent = 0;
   let failed = 0;
+  let pushSent = 0;
+  let pushFailed = 0;
 
   for (const uid of targetUids) {
     try {
@@ -123,37 +131,25 @@ export async function sendSystemNotice(
       }
 
       // The notice itself, from Vee Team.
-      // 2026-10-18 (Sumon): banner support — if imageUrl provided, send the
-      // banner as an image message first, then the text.
-      if (imageUrl) {
-        const imgMsgRef = push(ref(database, `chats/${chatId}/messages`));
-        await set(imgMsgRef, {
-          chatId,
-          senderId: VEE_TEAM_UID,
-          senderName: VEE_TEAM_NAME,
-          type: 'image',
-          content: imageUrl,
-          createdAt: now,
-          status: 'sent',
-          reactions: {},
-          isSystemNotice: true,
-          bannerNotice: true,
-          deletedForMe: false,
-          deletedForEveryone: false,
-        });
-      }
+      // 2026-11-01 (batch57): ONE combined message — text + image together.
+      // The old 2026-10-18 design sent an image message AND a separate text
+      // message, which arrived as two bubbles and no push. An image notice
+      // is now type 'image' with the text as `caption` (rendered by the app
+      // below the photo); a text-only notice is unchanged. `bannerImage`
+      // (never read by the app) is dropped.
       const newMsgRef = push(ref(database, `chats/${chatId}/messages`));
       await set(newMsgRef, {
         chatId,
         senderId: VEE_TEAM_UID,
         senderName: VEE_TEAM_NAME,
-        type: 'text',
-        content,
-        createdAt: now + (imageUrl ? 1 : 0),
+        type: imageUrl ? 'image' : 'text',
+        content: imageUrl ?? content,
+        ...(imageUrl ? { caption: content } : {}),
+        createdAt: now,
         status: 'sent',
         reactions: {},
         isSystemNotice: true,
-        bannerImage: imageUrl || null,
+        bannerNotice: !!imageUrl,
         deletedForMe: false,
         deletedForEveryone: false,
       });
@@ -174,6 +170,31 @@ export async function sendSystemNotice(
       ]);
 
       sent++;
+
+      // Best-effort rich push for this recipient (never throws).
+      if (opts?.idToken) {
+        try {
+          const resp = await fetch('https://vee-club.duckdns.org/api/notifications/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${opts.idToken}`,
+            },
+            body: JSON.stringify({
+              externalUserId: uid,
+              title: 'Vee Team',
+              message: content,
+              data: { chatId },
+              category: 'messages',
+              ...(imageUrl ? { imageUrl } : {}),
+            }),
+          });
+          if (resp.ok) pushSent++;
+          else pushFailed++;
+        } catch {
+          pushFailed++;
+        }
+      }
     } catch {
       failed++;
     }
@@ -188,5 +209,5 @@ export async function sendSystemNotice(
     details: `System notice sent to ${sent} users (${failed} failed)${imageUrl ? ' [with banner]' : ''}: ${content.slice(0, 100)}`,
   });
 
-  return { sent, failed };
+  return { sent, failed, pushSent, pushFailed };
 }
