@@ -21,6 +21,79 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+// 2026-11-01 (batch62): notification-sized preview of a banner.
+// Android's notification-image download (expo-notifications DownloadImage)
+// times out at 8s connect + 8s read. A 1.7 MB banner needs ~8s+ on a
+// 200 K/S connection and far longer on slower ones, so the shade falls back
+// to text-only. Telegram's behavior, mirrored here: the push carries a small
+// fast preview; tapping opens the full original in chat.
+// The preview keeps the FULL image (aspect preserved, never cropped):
+// long side capped at 1200px, JPEG, shrinking until <= 100KB.
+// 100KB is the largest size that still fits the 1-2 second window on a slow
+// connection: ~0.5s at 200 K/S and ~2s at 50 K/S, so the notification
+// arrives within 1-2 seconds, complete with image. The mechanism is the
+// OS's own download-then-show path — Android fetches notification.image in
+// the background and only then presents the notification — so there is no
+// new prefetch architecture and no app-side delayed presentation here.
+// Throws on any generation failure — callers fall back to the original URL.
+async function buildNotificationPreview(file: File): Promise<Blob> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Preview: banner could not be decoded'));
+      el.src = objectUrl;
+    });
+    const naturalW = img.naturalWidth;
+    const naturalH = img.naturalHeight;
+    if (!naturalW || !naturalH) throw new Error('Preview: banner has no dimensions');
+    const toBlob = (canvas: HTMLCanvasElement, quality: number): Promise<Blob> =>
+      new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error('Preview: canvas encode failed'))),
+          'image/jpeg',
+          quality,
+        );
+      });
+    const render = (maxDim: number): HTMLCanvasElement => {
+      const scale = Math.min(1, maxDim / Math.max(naturalW, naturalH));
+      const w = Math.max(1, Math.round(naturalW * scale));
+      const h = Math.max(1, Math.round(naturalH * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Preview: no 2d canvas context');
+      // JPEG has no alpha — paint white behind transparent banners so the
+      // preview never renders as black.
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      return canvas;
+    };
+    const BUDGET = 100 * 1024;
+    let maxDim = 1200;
+    let quality = 0.8;
+    let blob = await toBlob(render(maxDim), quality);
+    // Shrink until under budget: quality steps first, then dimensions.
+    // Bounded (<= 8 attempts); the smallest attempt is returned even if
+    // still over budget — still far smaller than the original.
+    for (let attempt = 0; attempt < 8 && blob.size > BUDGET; attempt++) {
+      if (quality > 0.5) {
+        quality = Math.max(0.5, +(quality - 0.1).toFixed(2));
+      } else {
+        maxDim = Math.max(320, Math.round(maxDim * 0.75));
+        quality = 0.7;
+      }
+      blob = await toBlob(render(maxDim), quality);
+    }
+    return blob;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export default function SystemNoticesPage() {
   const { appUser } = useAppAuth();
   const queryClient = useQueryClient();
@@ -122,7 +195,33 @@ export default function SystemNoticesPage() {
         bannerUrl = data.url;
         if (!bannerUrl) throw new Error('Banner upload returned no URL');
       }
-      return sendSystemNotice(targets, text, appUser.uid, appUser.name, bannerUrl, { idToken });
+      // 2026-11-01 (batch62): small fast preview for the PUSH ONLY.
+      // The DM keeps the full original (bannerUrl). Preview upload uses the
+      // regular path (NOT original=1 — the preview is meant to be small).
+      // The preview upload completes BEFORE sendSystemNotice, so no push
+      // ever references a preview URL that does not exist yet.
+      // Any preview failure falls back to the original URL for the push
+      // (never worse than today) and NEVER fails the notice.
+      let pushImageUrl: string | undefined;
+      if (bannerFile && bannerUrl && idToken) {
+        try {
+          const previewBlob = await buildNotificationPreview(bannerFile);
+          const previewForm = new FormData();
+          previewForm.append('file', previewBlob, 'notice-preview.jpg');
+          previewForm.append('type', 'chat');
+          const previewResp = await fetch('https://vee-club.duckdns.org/api/media/upload', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${idToken}` },
+            body: previewForm,
+          });
+          if (!previewResp.ok) throw new Error('Preview upload failed');
+          const previewData = await previewResp.json();
+          if (previewData.url) pushImageUrl = previewData.url;
+        } catch {
+          pushImageUrl = undefined;
+        }
+      }
+      return sendSystemNotice(targets, text, appUser.uid, appUser.name, bannerUrl, { idToken, pushImageUrl });
     },
     onSuccess: (res) => {
       toast.success(`Notice sent to ${res.sent} users${res.failed ? ` (${res.failed} failed)` : ''}${res.pushFailed ? ` (push failed for ${res.pushFailed})` : ''}`);

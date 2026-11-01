@@ -81,7 +81,13 @@ export async function sendSystemNotice(
   // (title 'Vee Team', body = notice text, banner image when present).
   // Push is best-effort and never fails the notice itself. Callers that
   // omit opts keep today's DM-only behavior (e.g. ban warnings).
-  opts?: { idToken?: string },
+  // 2026-11-01 (batch62): opts.pushImageUrl overrides the PUSH image only.
+  // The DM message always keeps `imageUrl` (the full original banner); the
+  // push carries the small notification preview when the caller provides one
+  // (Android's notification-image download times out on big originals over
+  // slow connections, falling back to text-only). Without pushImageUrl the
+  // push keeps today's behavior (original URL).
+  opts?: { idToken?: string; pushImageUrl?: string },
 ): Promise<{ sent: number; failed: number; pushSent: number; pushFailed: number }> {
   const database = requireRtdb();
   let sent = 0;
@@ -174,6 +180,9 @@ export async function sendSystemNotice(
       // Best-effort rich push for this recipient (never throws).
       if (opts?.idToken) {
         try {
+          // 2026-11-01 (batch62): push image = preview when provided,
+          // else the original banner (today's behavior, fallback).
+          const pushImageUrl = opts?.pushImageUrl ?? imageUrl;
           const resp = await fetch('https://vee-club.duckdns.org/api/notifications/send', {
             method: 'POST',
             headers: {
@@ -186,7 +195,7 @@ export async function sendSystemNotice(
               message: content,
               data: { chatId },
               category: 'messages',
-              ...(imageUrl ? { imageUrl } : {}),
+              ...(pushImageUrl ? { imageUrl: pushImageUrl } : {}),
             }),
           });
           if (resp.ok) pushSent++;
