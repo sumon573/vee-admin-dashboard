@@ -74,7 +74,19 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 max-h-[--radix-select-content-available-height] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-select-content-transform-origin]',
+        // 2026-11-11 (Grant Honor dropdown scroll fix): Tailwind v4 does NOT
+        // understand the v3 `[--var]` shorthand — it emits an EMPTY rule, so
+        // `max-h-[--radix-select-content-available-height]` computed to
+        // `max-height: none`: the list rendered at full natural height
+        // (20 items ≈ 650px), ran 246px past the bottom of a 844px phone
+        // screen, and the Viewport had scrollHeight == clientHeight, i.e.
+        // NOTHING to scroll (touch drag did nothing; react-remove-scroll
+        // also treats such a location as unscrollable). The explicit
+        // `var(...)` form is what dropdown-menu.tsx already uses and works.
+        // The cap is viewport-derived (Radix sets it to innerHeight - 20),
+        // never item-count-derived, so ANY future number of honors stays
+        // reachable by scrolling.
+        'relative z-50 max-h-[var(--radix-select-content-available-height)] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[var(--radix-select-content-transform-origin)]',
         position === 'popper' &&
           'data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1',
         className,
@@ -85,7 +97,10 @@ const SelectContent = React.forwardRef<
       <SelectScrollUpButton />
       <SelectPrimitive.Viewport
         className={cn(
-          'p-1',
+          // 2026-11-11: touch-pan-y + overscroll-contain — the Viewport is
+          // the scroll container; make vertical touch-panning explicit and
+          // stop scroll-chaining into the Dialog behind it at the ends.
+          'p-1 touch-pan-y overscroll-contain',
           position === 'popper' &&
             'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]',
         )}
